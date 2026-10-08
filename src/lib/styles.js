@@ -46,15 +46,36 @@ export const STYLES = [
 
 export const CURRENCIES = ['USD', 'EUR', 'GBP', 'UZS', 'AED', 'INR', 'JPY']
 
-export function formatMoney(amount, currency) {
+/** Any language hint ('uz', 'ru-RU', 'uz-Latn-UZ', …) → one of the three tags. */
+function normaliseLocale(lang) {
+  const code = String(lang || '').toLowerCase()
+  if (code.startsWith('uz')) return 'uz-Latn-UZ'
+  if (code.startsWith('ru')) return 'ru-RU'
+  return 'en-US'
+}
+
+function currentLocale() {
+  return normaliseLocale((typeof document !== 'undefined' && document.documentElement.lang) || 'uz')
+}
+
+/** So'm reads better as a word after the number than as an ISO code. */
+const SOM = { 'uz-Latn-UZ': 'soʻm', 'ru-RU': 'сум', 'en-US': 'UZS' }
+
+export function formatMoney(amount, currency, locale) {
   const value = Number(amount) || 0
+  const tag = locale ? normaliseLocale(locale) : currentLocale()
+  const code = String(currency || 'USD').toUpperCase()
+  if (code === 'UZS') {
+    const n = new Intl.NumberFormat(tag, { maximumFractionDigits: 0 }).format(Math.round(value))
+    return `${n} ${SOM[tag] || 'UZS'}`
+  }
   try {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat(tag, {
       style: 'currency',
-      currency,
+      currency: code,
       maximumFractionDigits: 0,
     }).format(value)
   } catch {
-    return `${Math.round(value).toLocaleString()} ${currency}`
+    return `${Math.round(value).toLocaleString()} ${code}`
   }
 }

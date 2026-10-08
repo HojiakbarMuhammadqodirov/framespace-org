@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+
+    /* The frozen API layer and the legacy screens stay JavaScript and are
+       never type-checked. New code is .ts/.tsx. Strictness is deliberately
+       off for now so the migration never blocks a step. */
+    "allowJs": true,
+    "checkJs": false,
+    "strict": false,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": false,
+
+    /* TypeScript 7 removed `baseUrl`; paths are relative to this file. */
+    "paths": {
+      "@/*": ["./src/*"],
+      "@contract/*": ["./server/*"]
+    }
+  },
+  "include": ["src", "vite.config.js"],
+  "exclude": ["node_modules", "dist", "src/legacy"]
+}

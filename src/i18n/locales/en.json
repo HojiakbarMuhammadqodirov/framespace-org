@@ -1,0 +1,361 @@
+{
+  "brand": {
+    "name": "FrameSpace",
+    "tagline": "Your room. In 3D. Before you buy anything.",
+    "taglineShort": "See it first. Then buy it."
+  },
+  "nav": {
+    "howItWorks": "How it works",
+    "catalog": "Catalog",
+    "styles": "Styles",
+    "gallery": "Gallery",
+    "pricing": "Pricing",
+    "forBusiness": "For business",
+    "about": "About",
+    "faq": "FAQ",
+    "contact": "Contact",
+    "login": "Log in",
+    "signup": "Sign up",
+    "menu": "Menu",
+    "close": "Close",
+    "dashboard": "My projects"
+  },
+  "dock": {
+    "projects": "Projects",
+    "capture": "Photograph room",
+    "upload": "Upload"
+  },
+  "common": {
+    "start": "Start",
+    "continue": "Continue",
+    "back": "Back",
+    "cancel": "Cancel",
+    "save": "Save",
+    "retry": "Try again",
+    "loading": "Loading",
+    "language": "Language",
+    "currency": "Currency",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "metres": "m",
+    "drag": "Drag",
+    "rotate": "Rotate",
+    "open": "Open",
+    "nextStep": "This page is being prepared. If you have a question, write to us."
+  },
+  "styles": {
+    "Scandinavian": "Scandinavian",
+    "Japandi": "Japandi",
+    "Minimalist": "Minimalist",
+    "Mid-century modern": "Mid-century modern",
+    "Industrial": "Industrial",
+    "Bohemian": "Bohemian",
+    "Modern luxe": "Modern luxe",
+    "Coastal": "Coastal",
+    "blurb": {
+      "Scandinavian": "Pale woods, white walls, nothing shouting.",
+      "Japandi": "Low, quiet, warm. Japanese restraint on Nordic bones.",
+      "Minimalist": "One material, one gesture, a lot of air.",
+      "Mid-century modern": "Tapered legs, walnut, a burnt-orange note.",
+      "Industrial": "Raw concrete, blackened steel, honest bulbs.",
+      "Bohemian": "Layered rugs, rattan, plants everywhere.",
+      "Modern luxe": "Deep tones, brass, stone, weight.",
+      "Coastal": "Bleached linen, sea glass, morning light."
+    }
+  },
+  "landing": {
+    "hero": {
+      "label": "01 — Your room",
+      "title": "Your room, in 3D. *Before you buy a thing.*",
+      "lead": "Photograph your room, set a budget, and see it furnished with real pieces. Same walls, same light.",
+      "ctaUpload": "Upload photos",
+      "ctaBuild": "Build my room in 3D",
+      "ctaPhone": "Continue on phone",
+      "desktopNote": "Photographing a room needs a phone camera. On a computer, upload the photos or build the room from its dimensions.",
+      "beforeLabel": "Now",
+      "afterLabel": "Suggested",
+      "dragHint": "Drag to compare",
+      "filmHint": "Drag to orbit",
+      "qrTitle": "Open on your phone",
+      "qrBody": "Scan this and the capture flow opens on your phone, signed into the same account.",
+      "styleChips": [
+        {
+          "key": "minimal",
+          "label": "Minimal"
+        },
+        {
+          "key": "japandi",
+          "label": "Japandi"
+        },
+        {
+          "key": "modernUzbek",
+          "label": "Modern Uzbek"
+        },
+        {
+          "key": "classic",
+          "label": "Classic"
+        }
+      ],
+      "ctaCamera": "Photograph your room",
+      "liveBadge": "Live 3D",
+      "styleGroup": "Room style"
+    },
+    "steps": {
+      "label": "02 — How it works",
+      "title": "Three steps, *about four minutes.*",
+      "lead": "No measuring tape, no floor plan, no designer appointment.",
+      "items": [
+        {
+          "index": "01",
+          "title": "Photograph the room",
+          "body": "Six or seven photos, turning on the spot. The app names each wall in turn and records which way the phone was facing, so nothing gets guessed later."
+        },
+        {
+          "index": "02",
+          "title": "Choose a style and a budget",
+          "body": "Pick the look, then set what you are willing to spend. The furniture list is costed against that number and never quietly goes over it."
+        },
+        {
+          "index": "03",
+          "title": "See it in the room",
+          "body": "Your own photographs come back restyled — same walls, same windows, same daylight. Then point the phone at the room and look around inside it."
+        }
+      ]
+    },
+    "catalog": {
+      "label": "03 — Catalog",
+      "title": "Furniture in *real 3D*, not flat photographs.",
+      "lead": "Rotate a piece, look underneath it, then drop it into your own room and see whether it actually fits.",
+      "cta": "Open the catalog",
+      "hint": "Every piece is a real 3D model",
+      "prev": "Previous pieces",
+      "next": "Next pieces"
+    },
+    "ai": {
+      "label": "04 — The suggestion",
+      "title": "Photographs in. *A costed room out.*",
+      "lead": "The room is read first — dimensions, windows, doors, radiators, where the daylight comes from — and the design is built around what cannot move.",
+      "stages": [
+        "Reading the room",
+        "Placing furniture",
+        "Working out the light",
+        "Costing the list"
+      ],
+      "outputs": [
+        {
+          "title": "Furniture, priced",
+          "body": "Every piece with a realistic market price, a quantity and a place in the room — and a total measured against your budget."
+        },
+        {
+          "title": "Light, by direction",
+          "body": "Where the daylight falls, what to add, and at what colour temperature. The renders keep your real window where it is."
+        },
+        {
+          "title": "Sockets and electrics",
+          "body": "What needs a socket, what needs moving, and what the lamp on the far wall will cost you in cable."
+        }
+      ]
+    },
+    "live": {
+      "label": "05 — See by yourself",
+      "title": "Stand in the room *you have not bought yet.*",
+      "lead": "Go back to where you took the photographs, face the same way, and press Start. The phone shows your real room, live, in the new design — turn around and the design turns with you.",
+      "steps": [
+        {
+          "title": "Return to the spot",
+          "body": "The first photo you took is the anchor. The app knows which way you were facing."
+        },
+        {
+          "title": "Line up with the guide",
+          "body": "A ghost of that photo and a heading tape help you match it. Within about ten degrees, Start unlocks."
+        },
+        {
+          "title": "Press Start and look around",
+          "body": "Turn the phone and the restyled room turns with it. Tilt up and you see the ceiling. Hold to see the room as it is now."
+        }
+      ],
+      "mobileOnly": "Runs on the phone — it needs the camera and the compass. On a computer we show you a QR code instead.",
+      "cta": "Try it on your phone"
+    },
+    "business": {
+      "label": "06 — For business",
+      "title": "Your whole catalog, in 3D, *in your customer's own room.*",
+      "lead": "Every furniture brand and store gets its own dashboard and its own 3D catalog. Upload a product once; customers rotate it, filter it and place it in the room they actually live in.",
+      "points": [
+        {
+          "title": "Your own dashboard",
+          "body": "Products, prices, stock and tags. Upload in bulk, see which pieces get opened and rotated."
+        },
+        {
+          "title": "A 3D catalog, not a PDF",
+          "body": "Each product becomes a model the customer can turn around and stand next to their own sofa."
+        },
+        {
+          "title": "Placements, not just views",
+          "body": "You see how often a piece was dropped into a real room — the signal that matters before someone walks in."
+        },
+        {
+          "title": "Your branding",
+          "body": "Your logo, your colours, your own catalog page. It reads as your store, not as ours."
+        }
+      ],
+      "note": "Nothing like this exists in Uzbekistan yet.",
+      "cta": "Talk to us about a pilot"
+    },
+    "pricing": {
+      "label": "07 — Pricing",
+      "title": "Start free. *Pay when it is worth paying for.*",
+      "lead": "One room costs nothing. Prices are in so'm and include everything.",
+      "popular": "Most chosen",
+      "plans": [
+        {
+          "name": "Free",
+          "price": "0",
+          "period": "UZS",
+          "description": "One room, start to finish, without an account.",
+          "features": [
+            "1 room design",
+            "4 restyled angles",
+            "Costed furniture list",
+            "360° walk-around",
+            "See by yourself — 60 seconds"
+          ],
+          "cta": "Start free"
+        },
+        {
+          "name": "Pro",
+          "price": "99 000",
+          "period": "UZS / month",
+          "description": "For a whole flat, and for changing your mind a few times.",
+          "features": [
+            "20 room designs a month",
+            "Up to 4 style variants each",
+            "3D room builder",
+            "See by yourself — unlimited",
+            "PDF moodboard and share links",
+            "Projects saved to your account"
+          ],
+          "cta": "Choose Pro"
+        },
+        {
+          "name": "Studio",
+          "price": "299 000",
+          "period": "UZS / month",
+          "description": "For designers and renovation teams working for clients.",
+          "features": [
+            "Unlimited room designs",
+            "Client-ready PDF export",
+            "Your logo on shared results",
+            "Priority generation",
+            "Three team members"
+          ],
+          "cta": "Choose Studio"
+        }
+      ],
+      "note": "Furniture brands and stores are priced separately — see For business."
+    },
+    "faq": {
+      "label": "08 — Questions",
+      "title": "The questions people actually ask.",
+      "items": [
+        {
+          "q": "Do I need to measure the room?",
+          "a": "No. The dimensions are estimated from the photographs — door heights, sockets and floorboards give the scale away. You are told how confident that estimate is, and you can correct it in the 3D builder if you want to."
+        },
+        {
+          "q": "Are these my walls, or a stock photo of someone else's room?",
+          "a": "Yours. Each render is your own photograph, repainted. The wall positions, the window, the door and the direction the light comes from are all kept exactly where they are."
+        },
+        {
+          "q": "Can I actually buy the furniture?",
+          "a": "The list comes with realistic market prices so the budget means something. Where a piece exists in the catalog of a store working with us, it links straight through. The rest is a specification you can take to any shop."
+        },
+        {
+          "q": "Does 'See by yourself' work on an iPhone?",
+          "a": "Yes. It asks for the camera and the motion sensors, and iOS requires you to tap to grant that. If the phone is old or offline, it falls back to a 360° panorama built from the renders, which works everywhere."
+        },
+        {
+          "q": "What if I do not have a budget in mind?",
+          "a": "Leave it empty. You still get an honest total, priced at the middle of the normal retail range rather than the cheapest thing that could be found."
+        },
+        {
+          "q": "Do you keep my photographs?",
+          "a": "Your projects are saved to your account so you can come back to them, and you can delete any project — photographs included — at any time. Without an account nothing leaves your device except the one generation you asked for."
+        }
+      ]
+    },
+    "footer": {
+      "tagline": "Your room. In 3D. Before you buy anything.",
+      "product": "Product",
+      "company": "Company",
+      "legal": "Legal",
+      "rights": "All rights reserved.",
+      "madeIn": "Made in Tashkent.",
+      "terms": "Terms",
+      "privacy": "Privacy"
+    },
+    "proof": {
+      "title": "In numbers",
+      "styles": "interior styles",
+      "items": "pieces in the catalog",
+      "stores": "partner stores",
+      "speed": "minutes to a finished project"
+    },
+    "closing": {
+      "title": "See your room *in a new light* today.",
+      "lead": "A few photos — and your room is ready in the style you chose, with real furniture."
+    }
+  },
+  "styleguide": {
+    "title": "Design system",
+    "subtitle": "Step 2 of the redesign. Every token, component state and motion primitive in one place.",
+    "sections": {
+      "color": "Colour",
+      "contrast": "Contrast audit",
+      "type": "Typography",
+      "buttons": "Buttons",
+      "inputs": "Inputs",
+      "cards": "Cards",
+      "motion": "Motion",
+      "feedback": "Loading & feedback",
+      "i18n": "Languages"
+    },
+    "contrastNote": "AA needs 4.5:1 for normal text, 3:1 for large text and UI parts. Computed, not eyeballed.",
+    "playMotion": "Play",
+    "onPaper": "on paper",
+    "ratio": "Ratio",
+    "verdict": "Verdict",
+    "pass": "Pass",
+    "largeOnly": "Large text only",
+    "fail": "Fail"
+  },
+  "a11y": {
+    "skipToContent": "Skip to content",
+    "toggleTheme": "Toggle light and dark",
+    "language": "Language",
+    "primaryNav": "Main menu",
+    "mobileNav": "Mobile menu",
+    "quickActions": "Quick actions",
+    "loading": "Loading…"
+  },
+  "form": {
+    "required": "required"
+  },
+  "ui": {
+    "beforeAfter": {
+      "valuetext": "{{value}}% after"
+    }
+  },
+  "notFound": {
+    "title": "There is no such page",
+    "lead": "The link is out of date or the address has a typo. Carry on from the home page.",
+    "home": "Home page",
+    "catalog": "Open the catalog"
+  },
+  "placeholder": {
+    "step": "step",
+    "legal": "Legal",
+    "newProject": "Start a new project"
+  }
+}

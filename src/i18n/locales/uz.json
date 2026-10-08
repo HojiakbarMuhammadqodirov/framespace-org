@@ -1,0 +1,361 @@
+{
+  "brand": {
+    "name": "FrameSpace",
+    "tagline": "Xonangiz. 3D da. Hech narsa sotib olishdan oldin.",
+    "taglineShort": "Avval koʻring — keyin sotib oling."
+  },
+  "nav": {
+    "howItWorks": "Qanday ishlaydi",
+    "catalog": "Katalog",
+    "styles": "Uslublar",
+    "gallery": "Galereya",
+    "pricing": "Narxlar",
+    "forBusiness": "Biznes uchun",
+    "about": "Biz haqimizda",
+    "faq": "Savollar",
+    "contact": "Bogʻlanish",
+    "login": "Kirish",
+    "signup": "Roʻyxatdan oʻtish",
+    "menu": "Menyu",
+    "close": "Yopish",
+    "dashboard": "Mening loyihalarim"
+  },
+  "dock": {
+    "projects": "Loyihalar",
+    "capture": "Xonani suratga olish",
+    "upload": "Yuklash"
+  },
+  "common": {
+    "start": "Boshlash",
+    "continue": "Davom etish",
+    "back": "Orqaga",
+    "cancel": "Bekor qilish",
+    "save": "Saqlash",
+    "retry": "Qayta urinish",
+    "loading": "Yuklanmoqda",
+    "language": "Til",
+    "currency": "Valyuta",
+    "theme": "Mavzu",
+    "themeLight": "Yorugʻ",
+    "themeDark": "Qorongʻi",
+    "metres": "m",
+    "drag": "Suring",
+    "rotate": "Aylantiring",
+    "open": "Ochish",
+    "nextStep": "Bu sahifa tayyorlanmoqda. Savolingiz boʻlsa, bizga yozing."
+  },
+  "styles": {
+    "Scandinavian": "Skandinav",
+    "Japandi": "Japandi",
+    "Minimalist": "Minimalist",
+    "Mid-century modern": "Oʻrta asr moderni",
+    "Industrial": "Industrial",
+    "Bohemian": "Bohem",
+    "Modern luxe": "Zamonaviy hashamat",
+    "Coastal": "Dengiz boʻyi",
+    "blurb": {
+      "Scandinavian": "Och rangli yogʻoch, oq devorlar, hech narsa baqirmaydi.",
+      "Japandi": "Past, sokin, iliq. Shimol asosida yapon vazminligi.",
+      "Minimalist": "Bitta material, bitta ishora, koʻp boʻsh joy.",
+      "Mid-century modern": "Ingichka oyoqlar, yongʻoq yogʻochi, qizgʻish-toʻq sariq urgʻu.",
+      "Industrial": "Xom beton, qoraytirilgan poʻlat, ochiq lampochkalar.",
+      "Bohemian": "Qatlam-qatlam gilamlar, rotang, hamma joyda oʻsimlik.",
+      "Modern luxe": "Toʻq ranglar, latun, tosh — salmoqli koʻrinish.",
+      "Coastal": "Oqartirilgan zigʻir, dengiz shishasi, tonggi yorugʻlik."
+    }
+  },
+  "landing": {
+    "hero": {
+      "label": "01 — Xonangiz",
+      "title": "Xonangiz. 3D formatida. *Xarid qilishdan oldin.*",
+      "lead": "Xonangizni suratga oling, byudjetni belgilang — va uni haqiqiy mebel bilan jihozlangan holda koʻring. Oʻsha devorlar, oʻsha yorugʻlik.",
+      "ctaUpload": "Suratlarni yuklash",
+      "ctaBuild": "Xonamni 3D da qurish",
+      "ctaPhone": "Telefonda davom etish",
+      "desktopNote": "Xonani suratga olish uchun telefon kamerasi kerak. Kompyuterda suratlarni yuklang yoki xonani oʻlchamlaridan quring.",
+      "beforeLabel": "Hozir",
+      "afterLabel": "Taklif",
+      "dragHint": "Solishtirish uchun suring",
+      "filmHint": "Aylantirish uchun suring",
+      "qrTitle": "Telefonda oching",
+      "qrBody": "Buni skanerlang — suratga olish jarayoni telefoningizda, oʻsha akkaunt bilan ochiladi.",
+      "styleChips": [
+        {
+          "key": "minimal",
+          "label": "Minimal"
+        },
+        {
+          "key": "japandi",
+          "label": "Japandi"
+        },
+        {
+          "key": "modernUzbek",
+          "label": "Zamonaviy oʻzbek"
+        },
+        {
+          "key": "classic",
+          "label": "Klassik"
+        }
+      ],
+      "ctaCamera": "Xonani suratga olish",
+      "liveBadge": "Jonli 3D",
+      "styleGroup": "Xona uslubi"
+    },
+    "steps": {
+      "label": "02 — Qanday ishlaydi",
+      "title": "Uch qadam, *taxminan toʻrt daqiqa.*",
+      "lead": "Ruletka ham, chizma ham, dizayner bilan uchrashuv ham kerak emas.",
+      "items": [
+        {
+          "index": "01",
+          "title": "Xonani suratga oling",
+          "body": "Bir joyda turib aylaning — olti-yetti surat. Ilova har bir devorni navbat bilan aytadi va telefon qay tomonga qaraganini yozib boradi, shunda keyin hech narsa taxmin qilinmaydi."
+        },
+        {
+          "index": "02",
+          "title": "Uslub va byudjetni tanlang",
+          "body": "Avval koʻrinishni tanlaysiz, keyin qancha sarflashga tayyorligingizni. Mebel roʻyxati shu raqamga qarab hisoblanadi va undan jimgina oshib ketmaydi."
+        },
+        {
+          "index": "03",
+          "title": "Xonaning oʻzida koʻring",
+          "body": "Oʻz suratlaringiz yangi uslubda qaytadi — oʻsha devorlar, oʻsha derazalar, oʻsha kunduzgi yorugʻlik. Keyin telefonni xonaga qarating va ichiga qarab aylaning."
+        }
+      ]
+    },
+    "catalog": {
+      "label": "03 — Katalog",
+      "title": "Mebel yassi suratda emas, *haqiqiy 3D da.*",
+      "lead": "Buyumni aylantiring, ostiga qarang — keyin oʻz xonangizga qoʻying va haqiqatan sigʻadimi, koʻring.",
+      "cta": "Katalogni ochish",
+      "hint": "Har bir buyum — haqiqiy 3D model",
+      "prev": "Oldingi buyumlar",
+      "next": "Keyingi buyumlar"
+    },
+    "ai": {
+      "label": "04 — Taklif",
+      "title": "Suratlar kiradi. *Narxlangan xona chiqadi.*",
+      "lead": "Avval xona oʻqiladi — oʻlchamlar, derazalar, eshiklar, radiatorlar, yorugʻlik qayerdan tushishi — va dizayn qimirlamaydigan narsalar atrofida quriladi.",
+      "stages": [
+        "Xona oʻqilmoqda",
+        "Mebel joylashtirilmoqda",
+        "Yorugʻlik hisoblanmoqda",
+        "Roʻyxat narxlanmoqda"
+      ],
+      "outputs": [
+        {
+          "title": "Mebel, narxi bilan",
+          "body": "Har bir buyum real bozor narxi, soni va xonadagi oʻrni bilan — hamda byudjetingizga solishtirilgan umumiy summa."
+        },
+        {
+          "title": "Yorugʻlik, yoʻnalishi bilan",
+          "body": "Kunduzgi yorugʻlik qayerga tushadi, nima qoʻshish kerak va qanday rang haroratida. Renderlarda derazangiz oʻz joyida qoladi."
+        },
+        {
+          "title": "Rozetka va elektr",
+          "body": "Qayerga rozetka kerak, nimani koʻchirish kerak va narigi devordagi chiroq sizga qancha kabelga tushadi."
+        }
+      ]
+    },
+    "live": {
+      "label": "05 — Oʻzingiz koʻring",
+      "title": "Hali sotib olmagan *xonangizda turing.*",
+      "lead": "Suratga olgan joyingizga qayting, oʻsha tomonga qarang va Start bosing. Telefon sizning haqiqiy xonangizni jonli, yangi dizaynda koʻrsatadi — aylansangiz, dizayn ham siz bilan aylanadi.",
+      "steps": [
+        {
+          "title": "Oʻsha joyga qayting",
+          "body": "Birinchi olgan suratingiz tayanch nuqta. Ilova siz qay tomonga qaraganingizni biladi."
+        },
+        {
+          "title": "Koʻrsatkich boʻyicha moslang",
+          "body": "Oʻsha suratning sharpasi va yoʻnalish lentasi moslashga yordam beradi. Taxminan oʻn daraja ichida Start ochiladi."
+        },
+        {
+          "title": "Start bosing va qarang",
+          "body": "Telefonni burang — yangi xona ham buriladi. Yuqoriga egsangiz shift koʻrinadi. Bosib turing — xona hozirgi holida koʻrinadi."
+        }
+      ],
+      "mobileOnly": "Telefonda ishlaydi — kamera va kompas kerak. Kompyuterda buning oʻrniga QR kod koʻrsatamiz.",
+      "cta": "Telefonda sinab koʻring"
+    },
+    "business": {
+      "label": "06 — Biznes uchun",
+      "title": "Butun katalogingiz, 3D da, *mijozning oʻz xonasida.*",
+      "lead": "Har bir mebel brendi va doʻkoni oʻz paneli va oʻz 3D katalogiga ega boʻladi. Mahsulotni bir marta yuklang — mijozlar uni aylantiradi, filtrlaydi va oʻzi yashaydigan xonaga qoʻyadi.",
+      "points": [
+        {
+          "title": "Oʻz boshqaruv panelingiz",
+          "body": "Mahsulotlar, narxlar, qoldiq va teglar. Ommaviy yuklang, qaysi buyum ochilgani va aylantirilganini koʻring."
+        },
+        {
+          "title": "PDF emas, 3D katalog",
+          "body": "Har bir mahsulot mijoz aylantira oladigan modelga aylanadi — va uni oʻz divani yoniga qoʻyib koʻradi."
+        },
+        {
+          "title": "Koʻrish emas, joylashtirish",
+          "body": "Buyum necha marta haqiqiy xonaga qoʻyilganini koʻrasiz — odam doʻkonga kirishidan oldingi eng muhim signal."
+        },
+        {
+          "title": "Sizning brendingiz",
+          "body": "Sizning logotipingiz, ranglaringiz, oʻz katalog sahifangiz. U bizning emas, sizning doʻkoningizdek koʻrinadi."
+        }
+      ],
+      "note": "Oʻzbekistonda hozircha bunday narsa yoʻq.",
+      "cta": "Pilot haqida gaplashamiz"
+    },
+    "pricing": {
+      "label": "07 — Narxlar",
+      "title": "Bepul boshlang. *Toʻlashga arzigandagina toʻlang.*",
+      "lead": "Bitta xona — bepul. Narxlar soʻmda va hammasini oʻz ichiga oladi.",
+      "popular": "Eng koʻp tanlanadi",
+      "plans": [
+        {
+          "name": "Bepul",
+          "price": "0",
+          "period": "soʻm",
+          "description": "Bitta xona, boshidan oxirigacha, akkauntsiz.",
+          "features": [
+            "1 ta xona dizayni",
+            "4 ta burchak renderi",
+            "Narxlangan mebel roʻyxati",
+            "360° aylanma koʻrinish",
+            "Oʻzingiz koʻring — 60 soniya"
+          ],
+          "cta": "Bepul boshlash"
+        },
+        {
+          "name": "Pro",
+          "price": "99 000",
+          "period": "soʻm / oy",
+          "description": "Butun kvartira uchun va bir necha bor fikr oʻzgartirish uchun.",
+          "features": [
+            "Oyiga 20 ta xona dizayni",
+            "Har biriga 4 tagacha uslub varianti",
+            "3D xona quruvchi",
+            "Oʻzingiz koʻring — cheksiz",
+            "PDF muudbord va ulashish havolalari",
+            "Loyihalar akkauntda saqlanadi"
+          ],
+          "cta": "Pro ni tanlash"
+        },
+        {
+          "name": "Studio",
+          "price": "299 000",
+          "period": "soʻm / oy",
+          "description": "Mijoz uchun ishlaydigan dizayner va taʼmir jamoalari uchun.",
+          "features": [
+            "Cheksiz xona dizayni",
+            "Mijozga tayyor PDF eksport",
+            "Ulashilgan natijalarda sizning logotipingiz",
+            "Navbatsiz generatsiya",
+            "Uch nafar jamoa aʼzosi"
+          ],
+          "cta": "Studio ni tanlash"
+        }
+      ],
+      "note": "Mebel brendlari va doʻkonlari uchun narx alohida — «Biznes uchun» boʻlimiga qarang."
+    },
+    "faq": {
+      "label": "08 — Savollar",
+      "title": "Odamlar haqiqatan soʻraydigan savollar.",
+      "items": [
+        {
+          "q": "Xonani oʻlchashim kerakmi?",
+          "a": "Yoʻq. Oʻlchamlar suratlardan chamalanadi — eshik balandligi, rozetkalar va pol taxtalari masshtabni ochib beradi. Bu chama qanchalik ishonchli ekani sizga aytiladi, xohlasangiz 3D quruvchida tuzatasiz."
+        },
+        {
+          "q": "Bu mening devorlarimmi yoki boshqa birovning xonasi suratimi?",
+          "a": "Sizniki. Har bir render — sizning oʻz suratingiz, qayta boʻyalgani. Devor oʻrinlari, deraza, eshik va yorugʻlik tushish yoʻnalishi qayerda boʻlsa, oʻsha yerda qoladi."
+        },
+        {
+          "q": "Mebelni haqiqatan sotib olsam boʻladimi?",
+          "a": "Roʻyxat real bozor narxlari bilan keladi, shuning uchun byudjet maʼnoga ega boʻladi. Buyum biz bilan ishlayotgan doʻkon katalogida boʻlsa, toʻgʼridan-toʻgʼri havola qilinadi. Qolgani esa istalgan doʻkonga olib borsa boʻladigan spetsifikatsiya."
+        },
+        {
+          "q": "«Oʻzingiz koʻring» iPhone da ishlaydimi?",
+          "a": "Ha. U kamera va harakat sensorlarini soʻraydi, iOS esa buni berish uchun bosishingizni talab qiladi. Telefon eski boʻlsa yoki internet boʻlmasa, renderlardan yigʻilgan 360° panoramaga tushadi — u hamma joyda ishlaydi."
+        },
+        {
+          "q": "Byudjetim aniq boʻlmasa-chi?",
+          "a": "Boʻsh qoldiring. Baribir halol umumiy summa olasiz — eng arzon topilgan narsa emas, odatdagi chakana narx oraligʻining oʻrtasi boʻyicha."
+        },
+        {
+          "q": "Suratlarimni saqlab qolasizmi?",
+          "a": "Loyihalaringiz akkauntingizda saqlanadi, shunda qaytib kelasiz — va istalgan loyihani, suratlari bilan birga, xohlagan paytda oʻchirasiz. Akkauntsiz esa siz soʻragan bitta generatsiyadan boshqa hech narsa qurilmangizdan chiqmaydi."
+        }
+      ]
+    },
+    "footer": {
+      "tagline": "Xonangiz. 3D da. Hech narsa sotib olishdan oldin.",
+      "product": "Mahsulot",
+      "company": "Kompaniya",
+      "legal": "Huquqiy",
+      "rights": "Barcha huquqlar himoyalangan.",
+      "madeIn": "Toshkentda yaratilgan.",
+      "terms": "Shartlar",
+      "privacy": "Maxfiylik"
+    },
+    "proof": {
+      "title": "Raqamlarda",
+      "styles": "interyer uslubi",
+      "items": "katalogdagi buyum",
+      "stores": "hamkor doʻkon",
+      "speed": "daqiqada tayyor loyiha"
+    },
+    "closing": {
+      "title": "Xonangizni bugun *yangi koʻrinishda* koʻring.",
+      "lead": "Bir necha surat — va xonangiz tanlangan uslubda, haqiqiy mebel bilan tayyor."
+    }
+  },
+  "styleguide": {
+    "title": "Dizayn tizimi",
+    "subtitle": "Qayta dizaynning 2-bosqichi. Barcha tokenlar, komponent holatlari va harakat primitivlari bir joyda.",
+    "sections": {
+      "color": "Rang",
+      "contrast": "Kontrast tekshiruvi",
+      "type": "Tipografiya",
+      "buttons": "Tugmalar",
+      "inputs": "Maydonlar",
+      "cards": "Kartalar",
+      "motion": "Harakat",
+      "feedback": "Yuklanish va javob",
+      "i18n": "Tillar"
+    },
+    "contrastNote": "AA uchun oddiy matnga 4.5:1, katta matn va UI qismlariga 3:1 kerak. Koʻz bilan emas, hisoblab chiqilgan.",
+    "playMotion": "Ishga tushirish",
+    "onPaper": "paper ustida",
+    "ratio": "Nisbat",
+    "verdict": "Natija",
+    "pass": "Oʻtdi",
+    "largeOnly": "Faqat katta matn",
+    "fail": "Oʻtmadi"
+  },
+  "a11y": {
+    "skipToContent": "Asosiy qismga oʻtish",
+    "toggleTheme": "Yorugʻ va qorongʻini almashtirish",
+    "language": "Til",
+    "primaryNav": "Asosiy menyu",
+    "mobileNav": "Mobil menyu",
+    "quickActions": "Tezkor amallar",
+    "loading": "Yuklanmoqda…"
+  },
+  "form": {
+    "required": "majburiy"
+  },
+  "ui": {
+    "beforeAfter": {
+      "valuetext": "{{value}}% keyin"
+    }
+  },
+  "notFound": {
+    "title": "Bunday sahifa yoʻq",
+    "lead": "Havola eskirgan yoki manzilda xato bor. Bosh sahifadan davom eting.",
+    "home": "Bosh sahifa",
+    "catalog": "Katalogni ochish"
+  },
+  "placeholder": {
+    "step": "bosqich",
+    "legal": "Huquqiy",
+    "newProject": "Yangi loyiha boshlash"
+  }
+}

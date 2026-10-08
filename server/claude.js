@@ -3,15 +3,23 @@
 // that fits the budget at realistic average market prices, and writes the
 // image prompts that Gemini then renders.
 
+import { LANGUAGE_NAME } from './i18n.js'
 import Anthropic from '@anthropic-ai/sdk'
 import { angleById, RENDERABLE_ANGLE_IDS } from './angles.js'
 
-const MODEL = process.env.CLAUDE_MODEL || 'claude-opus-5'
+export const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5-5'
+const MODEL = CLAUDE_MODEL
 
 let client = null
 function getClient() {
   if (!process.env.ANTHROPIC_API_KEY) return null
-  if (!client) client = new Anthropic()
+  // The SDK itself retries 408/409/429/5xx and dropped connections with
+  // exponential backoff (honouring retry-after); `timeout` bounds each attempt.
+  if (!client)
+    client = new Anthropic({
+      maxRetries: Number(process.env.CLAUDE_MAX_RETRIES ?? 3),
+      timeout: Number(process.env.CLAUDE_TIMEOUT_MS ?? 180_000),
+    })
   return client
 }
 
@@ -172,6 +180,11 @@ const DESIGN_SCHEMA = {
   },
 }
 
+function languageInstruction(locale) {
+  const language = LANGUAGE_NAME[locale] || LANGUAGE_NAME.uz
+  return `The user reads the app in ${language}. Write every user-facing prose field (summary, palette names and usage, materials, lighting, existingFeatures, lightingNotes, furniture names, descriptions and placements, budget notes) in ${language}. Keep renderPrompts in English — they go to an image model.`
+}
+
 function budgetInstruction(budget) {
   if (!budget || !budget.limit) {
     return 'The user set no budget. Choose furniture at sensible mid-market prices and still report an honest estimated total.'
@@ -222,10 +235,7 @@ function imageBlock(photo) {
  * @param {{limit:number,currency:string}|null} input.budget
  * @param {string} input.notes
  */
-export async function buildDesignBrief({ photos, style, budget, notes }) {
-  const anthropic = getClient()
-  if (!anthropic) throw new Error('ANTHROPIC_API_KEY is not set')
-
+export async function buildDesignBrief({ photos, style, budget, notes, locale = 'uz' }) {
   const renderable = photos.filter((p) => RENDERABLE_ANGLE_IDS.includes(p.angleId)).slice(0, 4)
 
   const content = []
@@ -241,6 +251,7 @@ export async function buildDesignBrief({ photos, style, budget, notes }) {
       `Style the user chose: ${style}.`,
       notes ? `What they asked for in their own words: "${notes}"` : 'They left no extra notes.',
       budgetInstruction(budget),
+      languageInstruction(locale),
       '',
       `Write exactly one entry in renderPrompts for each of these angleIds, in this order: ${renderable
         .map((p) => p.angleId)
@@ -248,15 +259,26 @@ export async function buildDesignBrief({ photos, style, budget, notes }) {
     ].join('\n'),
   })
 
+  return callStructured({ system: SYSTEM, content, schema: DESIGN_SCHEMA })
+}
+
+/**
+ * One structured-output call. Returns the parsed JSON with a `usage` field.
+ * Errors carry an HTTP-ish `status` and a user-safe message.
+ */
+async function callStructured({ system, content, schema, maxTokens = 16000, effort = 'high' }) {
+  const anthropic = getClient()
+  if (!anthropic) throw new Error('ANTHROPIC_API_KEY is not set')
+
   const params = {
     model: MODEL,
-    max_tokens: 16000,
-    system: SYSTEM,
+    max_tokens: maxTokens,
+    system,
     thinking: { type: 'adaptive' },
     messages: [{ role: 'user', content }],
     output_config: {
-      effort: 'high',
-      format: { type: 'json_schema', schema: DESIGN_SCHEMA },
+      effort,
+      format: { type: 'json_schema', schema },
     },
   }
 
@@ -281,16 +303,108 @@ export async function buildDesignBrief({ photos, style, budget, notes }) {
 
   if (response.stop_reason === 'refusal') {
     const category = response.stop_details?.category ?? 'unspecified'
-    throw new Error(`Claude declined this request (${category}). Try different photos or a different note.`)
+    throw providerError(422, `Claude declined this request (${category}). Try different input or a different note.`)
+  }
+  if (response.stop_reason === 'max_tokens') {
+    throw providerError(502, 'The design brief was cut off before it finished. Try again.')
   }
 
   const text = response.content.find((b) => b.type === 'text')?.text
-  if (!text) throw new Error('Claude returned no design brief.')
+  if (!text) throw providerError(502, 'Claude returned no design brief.')
 
-  const brief = JSON.parse(text)
-  brief.usage = {
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw providerError(502, 'Claude returned a malformed design brief. Try again.')
+  }
+  parsed.usage = {
     inputTokens: response.usage?.input_tokens ?? 0,
     outputTokens: response.usage?.output_tokens ?? 0,
   }
-  return brief
+  return parsed
+}
+
+function providerError(status, message) {
+  const err = new Error(message)
+  err.status = status
+  err.expose = true
+  return err
+}
+
+// ---------------------------------------------------------------- 3D scenes
+
+const SCENE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['design', 'lightingNotes', 'furnitureNotes', 'budgetNotes', 'renderPrompts'],
+  properties: {
+    design: DESIGN_SCHEMA.properties.design,
+    lightingNotes: {
+      type: 'string',
+      description: 'How light falls in this room given its windows and the lighting preset.',
+    },
+    furnitureNotes: {
+      type: 'array',
+      description: 'One entry per numbered furniture line, in the same order.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['line', 'name', 'description', 'placement'],
+        properties: {
+          line: { type: 'integer', description: 'The line number as given.' },
+          name: { type: 'string', description: 'A specific product-style name in the chosen style.' },
+          description: { type: 'string', description: 'Material, colour, upholstery, and how it suits the style.' },
+          placement: { type: 'string', description: 'Where it sits, relative to walls, windows and other pieces.' },
+        },
+      },
+    },
+    budgetNotes: { type: 'string', description: 'One or two sentences on the total against the budget.' },
+    renderPrompts: DESIGN_SCHEMA.properties.renderPrompts,
+  },
+}
+
+const SCENE_SYSTEM = `You are the design engine behind FrameSpace. Here the user has not photographed a room: they built it in a 3D planner — exact dimensions, windows and doors, and furniture they placed themselves at fixed positions with chosen finishes and catalogue prices.
+
+Your job: dress that layout in the style they picked. Keep every placed piece where it is; you choose wall colour, flooring, textiles, upholstery, lighting and small styling details. Describe each furniture line as a concrete product in that style.
+
+Then write one text-to-image prompt per camera view. There is no photograph to edit, so each prompt must stand alone: camera position and direction, room size, what is on the wall ahead (windows, doors), which furniture is visible and where, materials, palette hexes, and the light. Describe shared elements identically across prompts so the views read as one room. Photorealistic interior photography, no people, no text.`
+
+/**
+ * Design brief for a 3D builder scene.
+ * @returns {Promise<{design, lightingNotes, furnitureNotes, budgetNotes, renderPrompts, usage}>}
+ */
+export async function buildSceneBrief({ scene, lines, views, description }) {
+  const linesText = lines
+    .map(
+      (l, i) =>
+        `${i + 1}. ${l.catalogId} (${l.category}) x ${l.items.length}, ${l.material} finish, ${l.unitPrice} ${scene.budget.currency} each`
+    )
+    .join('\n')
+  const text = [
+    `Style: ${scene.style}.`,
+    languageInstruction(scene.locale),
+    scene.notes ? `Builder notes: ${scene.notes}` : '',
+    '',
+    description,
+    '',
+    lines.length ? `Furniture lines:\n${linesText}` : 'Furniture lines: none.',
+    scene.budget.limit
+      ? `Budget ceiling: ${scene.budget.limit} ${scene.budget.currency}. The total is fixed by the user's picks; comment on it honestly.`
+      : 'No budget ceiling was set.',
+    '',
+    `Write exactly one renderPrompts entry for each of these views, in this order: ${views
+      .map((v) => `${v.angleId} ("${v.angleLabel}", camera looking towards the ${v.wall} wall)`)
+      .join('; ')}.`,
+  ]
+    .filter((x, i, a) => x !== '' || a[i - 1] !== '')
+    .join('\n')
+
+  return callStructured({
+    system: SCENE_SYSTEM,
+    content: [{ type: 'text', text }],
+    schema: SCENE_SCHEMA,
+    maxTokens: 12000,
+    effort: 'medium',
+  })
 }

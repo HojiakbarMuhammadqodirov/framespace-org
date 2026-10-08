@@ -1,0 +1,473 @@
+/* Component styles for the primitives in src/ui.
+ * Hover and press states here implement brief §3. Everything animates
+ * transform/opacity/background only; nothing animates layout. */
+
+@layer components {
+  /* ---------------------------------------------------------------- button */
+  .fs-btn {
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    min-height: var(--tap);
+    padding: 0 var(--s6);
+    border: 1px solid transparent;
+    border-radius: var(--radius-full);
+    font-family: var(--font-ui);
+    font-size: var(--step--1);
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1.2;
+    text-decoration: none;
+    overflow: hidden;
+    transition: transform var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease),
+      color var(--d-fast) var(--ease);
+  }
+
+  /* The wipe: a pseudo-element scales in from the left rather than the
+     background-color transitioning, so it stays on the compositor. */
+  .fs-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform var(--d-base) var(--ease);
+  }
+  /* Hover states only fire on a real hovering pointer. On touch, a tap would
+     otherwise leave the wipe "stuck" on until the next tap elsewhere. */
+  @media (hover: hover) and (pointer: fine) {
+    .fs-btn:hover::before {
+      transform: scaleX(1);
+    }
+  }
+  .fs-btn:focus-visible::before {
+    transform: scaleX(1);
+  }
+  .fs-btn:active {
+    transform: scale(0.98);
+  }
+  .fs-btn[disabled],
+  .fs-btn[aria-disabled='true'] {
+    opacity: 0.45;
+    pointer-events: none;
+  }
+
+  /* Label and arrow shift 2px on hover. */
+  .fs-btn__label {
+    transition: transform var(--d-base) var(--ease);
+  }
+  .fs-btn__arrow {
+    display: inline-block;
+    transition: transform var(--d-base) var(--ease);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .fs-btn:hover .fs-btn__label {
+      transform: translateX(2px);
+    }
+    .fs-btn:hover .fs-btn__arrow {
+      transform: translateX(4px);
+    }
+  }
+
+  /* At rest the label uses --on-accent, which flips to clay-900 in dark mode
+     where the accent fill is lighter. Once the clay-500 wipe covers the fill,
+     paper is the readable label in both themes. */
+  .fs-btn--primary {
+    background: var(--accent-ink);
+    color: var(--on-accent);
+  }
+  .fs-btn--primary::before {
+    background: var(--clay-500);
+  }
+  .fs-btn--primary:focus-visible {
+    color: var(--paper);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .fs-btn--primary:hover {
+      color: var(--paper);
+    }
+  }
+
+  .fs-btn--secondary {
+    background: transparent;
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+  .fs-btn--secondary::before {
+    background: var(--clay-500);
+  }
+  .fs-btn--secondary:focus-visible {
+    color: var(--paper);
+    border-color: var(--clay-500);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .fs-btn--secondary:hover {
+      color: var(--paper);
+      border-color: var(--clay-500);
+    }
+  }
+
+  .fs-btn--ghost {
+    background: transparent;
+    color: var(--text);
+    padding-inline: var(--s3);
+  }
+  .fs-btn--ghost::before {
+    background: var(--bg-sunken);
+  }
+
+  .fs-btn--sm {
+    min-height: 36px;
+    padding-inline: var(--s4);
+    font-size: 0.8125rem;
+  }
+  .fs-btn--lg {
+    min-height: 56px;
+    padding-inline: var(--s8);
+    font-size: var(--step-0);
+  }
+  .fs-btn--block {
+    display: flex;
+    width: 100%;
+  }
+
+  /* ------------------------------------------------------------------ chip */
+  .fs-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s2);
+    min-height: 36px;
+    padding: 0 var(--s4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: var(--step--1);
+    transition: color var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease),
+      background-color var(--d-fast) var(--ease);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .fs-chip:hover {
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+  }
+  /* Press feedback for chips and cards lives at the end of luxury.css, after
+     the hover lifts, so a press always wins over a hover. */
+  /* Fingers need the full 44px; a 36px chip or small button is a mis-tap. */
+  @media (pointer: coarse) {
+    .fs-chip,
+    .fs-btn--sm {
+      min-height: var(--tap);
+    }
+    .fs-chip {
+      padding-inline: var(--s5);
+    }
+  }
+  .fs-chip[aria-pressed='true'],
+  .fs-chip[data-selected='true'] {
+    background: var(--text-strong);
+    border-color: var(--text-strong);
+    color: var(--bg);
+  }
+  .fs-chip__swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  }
+
+  /* ----------------------------------------------------------------- field */
+  .fs-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+  }
+  /* Sentence case in the UI face: a mono all-caps label read as a code
+     comment, and was the faintest text on most forms. */
+  .fs-field__label {
+    font-family: var(--font-ui);
+    font-size: var(--step--1);
+    font-weight: 500;
+    color: var(--text);
+  }
+  .fs-field__hint {
+    font-size: var(--step--1);
+    color: var(--text-muted);
+  }
+  .fs-input,
+  .fs-textarea,
+  .fs-select {
+    width: 100%;
+    min-height: var(--tap);
+    padding: var(--s3) var(--s4);
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 16px; /* 16px keeps iOS from zooming on focus */
+    transition: border-color var(--d-fast) var(--ease), background-color var(--d-fast) var(--ease);
+  }
+  .fs-input::placeholder,
+  .fs-textarea::placeholder {
+    color: var(--text-muted);
+    opacity: 0.7;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .fs-input:hover,
+    .fs-textarea:hover,
+    .fs-select:hover {
+      border-color: var(--border-strong);
+    }
+  }
+  .fs-input:focus-visible,
+  .fs-textarea:focus-visible,
+  .fs-select:focus-visible {
+    border-color: var(--focus);
+  }
+  .fs-textarea {
+    min-height: 120px;
+    resize: vertical;
+  }
+  .fs-field__error {
+    font-size: var(--step--1);
+    color: var(--err);
+  }
+  /* The error region stays mounted for aria-live; while empty, cancel the
+     flex gap it would otherwise add under the control. */
+  .fs-field__error:empty {
+    margin-top: calc(-1 * var(--s2));
+  }
+  .fs-input[aria-invalid='true'],
+  .fs-textarea[aria-invalid='true'],
+  .fs-select[aria-invalid='true'] {
+    border-color: var(--err);
+  }
+
+  /* ---------------------------------------------------------------- slider */
+  .fs-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: var(--tap);
+    background: transparent;
+  }
+  .fs-slider::-webkit-slider-runnable-track {
+    height: 2px;
+    background: var(--border-strong);
+  }
+  .fs-slider::-moz-range-track {
+    height: 2px;
+    background: var(--border-strong);
+  }
+  .fs-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px;
+    height: 22px;
+    margin-top: -10px;
+    border-radius: var(--radius-full);
+    background: var(--accent-ink);
+    border: 2px solid var(--bg);
+    transition: transform var(--d-fast) var(--ease);
+  }
+  .fs-slider::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--bg);
+    border-radius: var(--radius-full);
+    background: var(--accent-ink);
+  }
+  .fs-slider:active::-webkit-slider-thumb {
+    transform: scale(1.12);
+  }
+
+  /* ------------------------------------------------------------------ card */
+  .fs-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: box-shadow var(--d-base) var(--ease), border-color var(--d-base) var(--ease);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .fs-card--interactive:hover {
+      border-color: var(--border-strong);
+      box-shadow: var(--shadow-card);
+    }
+    .fs-card--interactive:hover::after {
+      opacity: 0.5;
+    }
+  }
+  /* A hairline that draws itself around the card on hover, §3. */
+  .fs-card--interactive::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 1px solid var(--accent);
+    opacity: 0;
+    transition: opacity var(--d-base) var(--ease);
+    pointer-events: none;
+  }
+  .fs-card--interactive:focus-within::after,
+  .fs-card--interactive:focus-visible::after {
+    opacity: 0.5;
+  }
+  .fs-card__frame {
+    position: relative;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    background: var(--bg-sunken);
+  }
+  .fs-card__body {
+    padding: var(--s5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+  }
+
+  /* ---------------------------------------------------------------- navlink */
+  .fs-navlink {
+    position: relative;
+    display: inline-block;
+    padding: var(--s2) 0;
+    color: var(--text);
+    text-decoration: none;
+    font-size: var(--step--1);
+    font-weight: 500;
+    transition: opacity var(--d-fast) var(--ease);
+  }
+  .fs-navlink::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform var(--d-base) var(--ease);
+  }
+  .fs-navlink[aria-current='page']::after {
+    transform: scaleX(1);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .fs-navlink:hover::after {
+      transform: scaleX(1);
+    }
+    /* Hovering one nav item dims its siblings to 55%, §3. */
+    .fs-nav:hover .fs-navlink:not(:hover) {
+      opacity: 0.55;
+    }
+  }
+
+  /* The custom cursor was removed; its styles went with it. The native
+     pointer is restored in src/ui/Cursor.tsx. */
+
+  /* --------------------------------------------------------- dimension line */
+  .fs-dim {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--step--2);
+    letter-spacing: var(--tracking-mono);
+  }
+  .fs-dim__line {
+    flex: 1;
+    height: 1px;
+    background: var(--hairline);
+    position: relative;
+  }
+  .fs-dim__line::before,
+  .fs-dim__line::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    width: 1px;
+    height: 7px;
+    background: var(--border-strong);
+  }
+  .fs-dim__line::before {
+    left: 0;
+  }
+  .fs-dim__line::after {
+    right: 0;
+  }
+
+  /* ------------------------------------------------------------ before/after */
+  .fs-ba {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: var(--bg-sunken);
+    touch-action: pan-y;
+    user-select: none;
+  }
+  .fs-ba__layer {
+    position: absolute;
+    inset: 0;
+  }
+  .fs-ba__layer img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .fs-ba__handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--clay-300);
+    pointer-events: none;
+  }
+  .fs-ba__grip {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 40px;
+    height: 40px;
+    transform: translate(-50%, -50%);
+    border-radius: var(--radius-full);
+    border: 1px solid var(--clay-300);
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    display: grid;
+    place-items: center;
+    color: var(--clay-700);
+  }
+  /* The real control is a transparent range input over the image, so its
+     focus ring would be invisible. Draw it on the grip instead. */
+  .fs-ba:has(input:focus-visible) .fs-ba__grip {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+  }
+
+  /* ---- responsive visibility -------------------------------------------
+     Classes rather than inline display, because an inline `display:none`
+     cannot be undone by a media query. */
+  .fs-only-desktop {
+    display: none;
+  }
+  .fs-only-mobile {
+    display: grid;
+  }
+  @media (min-width: 1024px) {
+    .fs-only-desktop {
+      display: flex;
+    }
+    .fs-only-mobile {
+      display: none;
+    }
+  }
+}

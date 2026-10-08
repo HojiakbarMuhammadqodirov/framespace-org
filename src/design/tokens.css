@@ -1,0 +1,320 @@
+/* FrameSpace design tokens — warm beige + orange.
+ *
+ * Light (beige) is the default surface; dark is an override.
+ *
+ * Every token NAME is stable, because ~150 files reference them and several
+ * were written against the dark-tech values. Only the values move. The
+ * `--ink-*` names introduced during that pass are kept and remapped onto the
+ * warm ramp, so nothing that referenced them shows a stray near-black.
+ *
+ * Contrast ratios in the comments are computed, not estimated. AA needs 4.5:1
+ * for normal text and 3:1 for large text (>=24px, or >=19px bold) and for the
+ * non-text parts of UI components.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ---- brand ramp ------------------------------------------------------ */
+  --clay-900: #2a1d16; /* deepest brown */
+  --clay-700: #4a3529; /* body text */
+  --clay-500: #6b4a35; /* primary brown */
+  --clay-300: #a67b5b; /* hover/active brown, 3D accents */
+  --sand-200: #e4d9cb; /* borders, dividers, muted surfaces */
+  --paper: #f6f1e9; /* main off-white background */
+  --white: #ffffff;
+
+  /* The dark-tech surface names, remapped onto the warm ramp. */
+  --ink-1000: var(--paper);
+  --ink-900: var(--white);
+  --ink-800: #efe8dd;
+  --ink-700: #e7dfd2;
+  --ink-600: var(--sand-200);
+  --ink-500: #c9bcab;
+
+  /* ---- text ------------------------------------------------------------ */
+  --text: var(--clay-700); /* 10.19:1 on paper */
+  --text-strong: var(--clay-900); /* 14.53:1 */
+  --text-muted: #6b5a4d; /* 5.85:1 */
+  --text-faint: #97897b; /* decorative only — never body copy */
+  --text-inverse: var(--paper);
+
+  /* ---- accent ---------------------------------------------------------- */
+  /* Paper on #C6552F is 3.94:1 and fails AA, so anything that reads as text —
+     including a filled button's label — uses the darker --accent-ink. The
+     brand orange itself stays for fills behind large type, live indicators and
+     non-text UI parts, where 3:1 is the bar. */
+  --accent: #c6552f; /* 3.94:1 — fills, indicators, large text */
+  --accent-ink: #b44d2b; /* 4.63:1 — text, and CTA fills */
+  --accent-soft: var(--clay-300);
+  --on-accent: var(--paper); /* 4.63:1 against --accent-ink */
+
+  --ok: #4e6b4a; /* 5.30:1 */
+  --warn: #b4832a; /* 3.00:1 — non-text only */
+  --warn-ink: #876220; /* 4.92:1 */
+  --err: #9e3a2b; /* 6.04:1 */
+
+  /* ---- semantic -------------------------------------------------------- */
+  --bg: var(--paper);
+  --bg-raised: var(--white);
+  --bg-sunken: #efe8dd;
+  --bg-hover: #e7dfd2;
+  --bg-inverse: var(--clay-900);
+
+  --hairline: rgba(42, 29, 22, 0.12);
+  --border: var(--sand-200);
+  --border-strong: rgba(42, 29, 22, 0.16);
+
+  --focus: var(--accent-ink);
+  --selection: rgba(198, 85, 47, 0.18);
+
+  /* ---- type ------------------------------------------------------------ */
+  /* Editorial serif for headlines, a warm geometric sans for UI. Both carry
+     Cyrillic (Geist did not) and U+02BB / U+02BC for Uzbek oʻ / gʻ. */
+  --font-display: 'Playfair Display', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Manrope', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Scale tuned for a high-contrast serif over a humanist sans. Playfair's
+     x-height is large and its hairlines thin, so display sizes sit a touch
+     smaller than they did in Geist, and body copy steps up to Manrope's
+     comfortable 16-17px. */
+  --step--2: 0.6875rem; /* 11px — mono eyebrows and figures only */
+  --step--1: 0.875rem; /* 14px — UI labels, captions */
+  --step-0: 1rem; /* 16px — body */
+  --step-1: clamp(1.0625rem, 1rem + 0.3vw, 1.1875rem); /* 17-19px — lead */
+  --step-2: clamp(1.25rem, 1.1rem + 0.8vw, 1.6rem);
+  --step-3: clamp(1.65rem, 1.3rem + 1.8vw, 2.6rem);
+  --step-4: clamp(2.1rem, 1.45rem + 3.2vw, 3.85rem);
+  --step-5: clamp(2.6rem, 1.5rem + 5.4vw, 5.75rem);
+
+  --lh-display: 1.06;
+  --lh-tight: 1.18;
+  --lh-body: 1.65;
+  /* A serif wants far less negative tracking than a grotesque: past -0.02em
+     Playfair's ball terminals start to touch. */
+  --tracking-display: -0.018em;
+  --tracking-heading: -0.008em;
+  --tracking-mono: 0.12em;
+  --fw-display: 400;
+  --fw-heading: 500;
+
+  /* ---- space — 4px base ------------------------------------------------ */
+  --s1: 0.25rem;
+  --s2: 0.5rem;
+  --s3: 0.75rem;
+  --s4: 1rem;
+  --s5: 1.25rem;
+  --s6: 1.5rem;
+  --s8: 2rem;
+  --s10: 2.5rem;
+  --s12: 3rem;
+  --s16: 4rem;
+  --s24: 6rem;
+  --s32: 8rem;
+
+  /* ---- structure ------------------------------------------------------- */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+  --bezel-pad: 5px;
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+  --radius-3xl: 28px;
+  --radius-inner-xl: calc(var(--radius-xl) - var(--bezel-pad));
+  --radius-inner-2xl: calc(var(--radius-2xl) - var(--bezel-pad));
+  --radius-inner-3xl: calc(var(--radius-3xl) - var(--bezel-pad));
+
+  /* Warm-tinted and heavily diffused. A neutral black shadow is what makes a
+     surface read as cheap on a cream background. */
+  --shadow-ambient: 0 1px 1px rgba(74, 53, 41, 0.03), 0 4px 10px rgba(74, 53, 41, 0.035),
+    0 16px 36px rgba(74, 53, 41, 0.045);
+  --shadow-raised: 0 1px 1px rgba(74, 53, 41, 0.04), 0 8px 20px rgba(74, 53, 41, 0.055),
+    0 28px 64px rgba(74, 53, 41, 0.07);
+  --shadow-float: 0 2px 4px rgba(74, 53, 41, 0.05), 0 14px 34px rgba(74, 53, 41, 0.08),
+    0 44px 96px rgba(74, 53, 41, 0.1);
+  --shadow-card: var(--shadow-ambient);
+  --shadow-lifted: var(--shadow-raised);
+
+  --inset-hi: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --inset-lo: inset 0 -1px 0 rgba(74, 53, 41, 0.05);
+
+  --bezel-shell: rgba(74, 53, 41, 0.045);
+  --bezel-ring: rgba(74, 53, 41, 0.09);
+  /* Specular sweep for tilt surfaces. On beige a white sheen still lifts the
+     surface; on the dark theme it has to be far fainter. */
+  --sheen: rgba(255, 255, 255, 0.5);
+
+  /* Vertical rhythm between landing sections: tight on phones, generous on
+     a wide screen. */
+  --section-y: clamp(3.25rem, 1.9rem + 5.6vw, 8rem);
+  --section-gap: clamp(2rem, 1.4rem + 3vw, 4.5rem);
+
+  --container: 1240px;
+  --gutter: 1rem;
+  --tap: 44px;
+
+  /* ---- motion ---------------------------------------------------------- */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-fluid: cubic-bezier(0.32, 0.72, 0, 1);
+  --d-fast: 160ms;
+  --d-base: 240ms;
+  --d-slow: 400ms;
+  --d-lux: 650ms;
+
+  --grain-opacity: 0.032;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --gutter: 2rem;
+  }
+}
+@media (min-width: 1280px) {
+  :root {
+    --gutter: 3rem;
+  }
+}
+
+/* ---- dark override ----------------------------------------------------- */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --ink-1000: var(--clay-900);
+  --ink-900: #352418;
+  --ink-800: #2f2017;
+  --ink-700: #3d2a1e;
+  --ink-600: #4a3529;
+
+  --bg: var(--clay-900);
+  --bg-raised: #352418;
+  --bg-sunken: #1f1510;
+  --bg-hover: #3d2a1e;
+  --bg-inverse: var(--paper);
+
+  --text: var(--paper); /* 14.53:1 */
+  --text-strong: var(--white);
+  --text-muted: rgba(246, 241, 233, 0.64);
+  --text-faint: rgba(246, 241, 233, 0.42);
+  --text-inverse: var(--clay-900);
+
+  --hairline: rgba(246, 241, 233, 0.14);
+  --border: rgba(246, 241, 233, 0.1);
+  --border-strong: rgba(246, 241, 233, 0.22);
+
+  /* The light-mode status colours are all too dark to sit on clay-900, so the
+     whole set lifts. Ratios are against --bg = #2a1d16. */
+  --accent: #cf6f4e; /* 4.70:1 — #c6552f would be 3.69:1 */
+  --accent-ink: #cf6f4e;
+  --accent-soft: #e0a28d;
+  --on-accent: var(--clay-900); /* 4.70:1 against --accent */
+  --ok: #7fa37a; /* 5.77:1 */
+  --warn: #b4832a; /* 4.84:1 — passes as text here */
+  --warn-ink: #c79733; /* 6.15:1 */
+  --err: #d97a66; /* 5.39:1 */
+
+  --focus: #cf6f4e;
+  --selection: rgba(207, 111, 78, 0.24);
+
+  --shadow-ambient: 0 1px 1px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.28),
+    0 18px 40px rgba(0, 0, 0, 0.34);
+  --shadow-raised: 0 2px 4px rgba(0, 0, 0, 0.26), 0 10px 26px rgba(0, 0, 0, 0.34),
+    0 32px 72px rgba(0, 0, 0, 0.42);
+  --shadow-float: 0 3px 6px rgba(0, 0, 0, 0.3), 0 18px 44px rgba(0, 0, 0, 0.4),
+    0 52px 110px rgba(0, 0, 0, 0.5);
+
+  --inset-hi: inset 0 1px 0 rgba(246, 241, 233, 0.09);
+  --inset-lo: inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+
+  --bezel-shell: rgba(246, 241, 233, 0.045);
+  --bezel-ring: rgba(246, 241, 233, 0.1);
+  --sheen: rgba(246, 241, 233, 0.07);
+
+  --grain-opacity: 0.045;
+}
+
+/* A panel that inverts against the page it sits in: dark on the beige page,
+   and back to beige when the whole product is in dark mode. */
+[data-surface='inverse'] {
+  color-scheme: dark;
+  --bg: var(--clay-900);
+  --bg-raised: #352418;
+  --bg-sunken: #1f1510;
+  --bg-hover: #3d2a1e;
+  --text: var(--paper);
+  --text-strong: var(--white);
+  --text-muted: rgba(246, 241, 233, 0.64);
+  --text-faint: rgba(246, 241, 233, 0.42);
+  --text-inverse: var(--clay-900);
+  --hairline: rgba(246, 241, 233, 0.14);
+  --border: rgba(246, 241, 233, 0.1);
+  --border-strong: rgba(246, 241, 233, 0.22);
+  --accent: #cf6f4e;
+  --accent-ink: #cf6f4e;
+  --accent-soft: #e0a28d;
+  --on-accent: var(--clay-900);
+  --ok: #7fa37a;
+  --warn-ink: #c79733;
+  --err: #d97a66;
+  --focus: #cf6f4e;
+  --inset-hi: inset 0 1px 0 rgba(246, 241, 233, 0.09);
+  --bezel-shell: rgba(246, 241, 233, 0.045);
+  --bezel-ring: rgba(246, 241, 233, 0.1);
+  background: var(--bg);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] [data-surface='inverse'] {
+  color-scheme: light;
+  --bg: var(--paper);
+  --bg-raised: var(--white);
+  --bg-sunken: #efe8dd;
+  --bg-hover: #e7dfd2;
+  --text: var(--clay-700);
+  --text-strong: var(--clay-900);
+  --text-muted: #6b5a4d;
+  --text-faint: #97897b;
+  --text-inverse: var(--paper);
+  --hairline: rgba(42, 29, 22, 0.12);
+  --border: var(--sand-200);
+  --border-strong: rgba(42, 29, 22, 0.16);
+  --accent: #c6552f;
+  --accent-ink: #b44d2b;
+  --accent-soft: #a67b5b;
+  --on-accent: var(--paper);
+  --ok: #4e6b4a;
+  --warn-ink: #876220;
+  --err: #9e3a2b;
+  --focus: #b44d2b;
+  --inset-hi: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --bezel-shell: rgba(74, 53, 41, 0.045);
+  --bezel-ring: rgba(74, 53, 41, 0.09);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --d-fast: 0ms;
+    --d-base: 0ms;
+    --d-slow: 0ms;
+    --d-lux: 0ms;
+  }
+}
+
+@theme inline {
+  --color-clay-900: var(--clay-900);
+  --color-clay-700: var(--clay-700);
+  --color-clay-500: var(--clay-500);
+  --color-clay-300: var(--clay-300);
+  --color-sand-200: var(--sand-200);
+  --color-paper: var(--paper);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-err: var(--err);
+
+  --font-fs-display: var(--font-display);
+  --font-fs-ui: var(--font-ui);
+  --font-fs-mono: var(--font-mono);
+}

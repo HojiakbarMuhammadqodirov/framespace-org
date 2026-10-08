@@ -1,22 +1,104 @@
 <!doctype html>
-<html lang="en">
+<html lang="uz-Latn-UZ">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
-    />
-    <meta name="theme-color" content="#12100e" />
+    <!-- No maximum-scale: pinch-zoom stays available (WCAG 1.4.4). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#F6F1E9" />
+
+    <!-- Theme and language before anything paints, so a dark-mode visitor never
+         sees a beige flash while the bundle loads. Mirrors initPrefs() in
+         src/store/prefs.ts: the stored choice first, then the OS preference. -->
+    <script>
+      (function () {
+        var d = document.documentElement
+        var theme = null
+        var lang = null
+        try {
+          var raw = localStorage.getItem('framespace.prefs.v3')
+          var state = raw ? (JSON.parse(raw) || {}).state : null
+          if (state) {
+            if (state.theme === 'dark' || state.theme === 'light') theme = state.theme
+            lang = state.lang || null
+          }
+          if (!lang) lang = localStorage.getItem('framespace.lang')
+        } catch (e) {}
+        if (!theme) theme = 'light'
+        if (!lang) {
+          var nav = (navigator.language || '').toLowerCase()
+          lang = nav.indexOf('ru') === 0 ? 'ru' : nav.indexOf('en') === 0 ? 'en' : 'uz'
+        }
+        d.dataset.theme = theme
+        d.lang = lang === 'ru' ? 'ru' : lang === 'en' ? 'en' : 'uz-Latn-UZ'
+        if (theme === 'dark') {
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', '#2A1D16')
+        }
+      })()
+    </script>
+    <style>
+      html{background:#F6F1E9;color:#2A1D16}
+      html[data-theme=dark]{background:#2A1D16;color:#F6F1E9}
+      body{margin:0}
+    </style>
+
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta
       name="description"
-      content="Photograph your room from every side and see it reimagined in the style — and the budget — you choose."
+      content="Xonangizni suratga oling, uslub va byudjetni tanlang — va uni 3D da, sotib olishdan oldin ko'ring."
     />
-    <title>FrameSpace — see your room, restyled</title>
+    <meta property="og:title" content="FrameSpace — xonangiz, 3D da" />
+    <meta
+      property="og:description"
+      content="Xonangizni suratga oling, uslub va byudjetni tanlang — va uni 3D da, sotib olishdan oldin ko'ring."
+    />
+    <meta property="og:image" content="/hero-poster.webp" />
+
+    <!-- The phone hero is a still poster; start fetching it with the HTML. -->
+    <link rel="preload" as="image" href="/hero-poster.webp" media="(max-width: 819px)" />
+
+    <!-- Playfair Display (headlines) + Manrope (UI) + JetBrains Mono (figures).
+         All three ship Latin AND Cyrillic subsets — Geist had no Cyrillic, so
+         every Russian string fell back to the system face. Their `latin`
+         subset covers U+02BB / U+02BC, so Uzbek "oʻ"/"gʻ" stays in-family.
+         Loaded without blocking render: the system face paints first. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..800;1,400..700&family=Manrope:wght@300..800&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..800;1,400..700&family=Manrope:wght@300..800&family=JetBrains+Mono:wght@400;500&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..800;1,400..700&family=Manrope:wght@300..800&family=JetBrains+Mono:wght@400;500&display=swap"
+      />
+    </noscript>
+
+    <title>FrameSpace — xonangiz, 3D da</title>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <!-- Static shell: painted with the HTML, replaced by React on mount. -->
+    <div id="root">
+      <div
+        aria-hidden="true"
+        style="min-height:100vh;min-height:100svh;display:grid;place-items:center;align-content:center;gap:20px"
+      >
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+          <rect x="2.5" y="2.5" width="27" height="27" rx="2" stroke="currentColor" stroke-width="1.5" />
+          <rect x="9.5" y="9.5" width="13" height="13" rx="1" stroke="currentColor" stroke-width="1.5" />
+        </svg>
+        <div style="width:96px;height:3px;border-radius:3px;background:currentColor;opacity:.14"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

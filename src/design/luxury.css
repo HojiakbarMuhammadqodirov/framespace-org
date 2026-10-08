@@ -1,0 +1,381 @@
+/* Luxury component layer — the "make it not boring" pass.
+ *
+ * Additions only. No class in components.css is renamed, so every component
+ * already written keeps working and gains depth for free.
+ */
+
+@layer components {
+  /* ---------------------------------------------------------- double bezel */
+  /* Nothing premium sits flat on the background. A bezel is a tray (shell)
+     holding a plate (core): two enclosures, concentric radii, and one inset
+     highlight so the plate reads as physically lit from above. */
+  .fs-bezel {
+    position: relative;
+    padding: var(--bezel-pad);
+    border-radius: var(--radius-2xl);
+    background: var(--bezel-shell);
+    box-shadow: inset 0 0 0 1px var(--bezel-ring);
+    transition: box-shadow var(--d-lux) var(--ease-fluid), transform var(--d-lux) var(--ease-fluid);
+  }
+  .fs-bezel__core {
+    position: relative;
+    height: 100%;
+    border-radius: var(--radius-inner-2xl);
+    background: var(--bg-raised);
+    box-shadow: var(--inset-hi), var(--inset-lo), var(--shadow-ambient);
+    overflow: hidden;
+  }
+  .fs-bezel--sm {
+    border-radius: var(--radius-xl);
+  }
+  .fs-bezel--sm > .fs-bezel__core {
+    border-radius: var(--radius-inner-xl);
+  }
+  .fs-bezel--lg {
+    border-radius: var(--radius-3xl);
+  }
+  .fs-bezel--lg > .fs-bezel__core {
+    border-radius: var(--radius-inner-3xl);
+  }
+  .fs-bezel--sunken > .fs-bezel__core {
+    background: var(--bg-sunken);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .fs-bezel--interactive:hover {
+      transform: translate3d(0, -2px, 0);
+      box-shadow: inset 0 0 0 1px var(--bezel-ring), var(--shadow-raised);
+    }
+  }
+  .fs-bezel--interactive:active {
+    transform: translate3d(0, 0, 0) scale(0.995);
+  }
+
+  /* --------------------------------------------------- button-in-button CTA */
+  /* The trailing arrow never sits naked beside the label: it lives in its own
+     circular well, flush with the button's right padding, and carries its own
+     kinetic response so the button has internal tension on hover. */
+  .fs-btn--icon {
+    padding-right: var(--s2);
+    gap: var(--s4);
+  }
+  .fs-btn__well {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.16);
+    transition: transform var(--d-base) var(--ease-fluid),
+      background-color var(--d-base) var(--ease-fluid);
+  }
+  .fs-btn--secondary .fs-btn__well,
+  .fs-btn--ghost .fs-btn__well {
+    background: var(--bezel-shell);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .fs-btn:hover .fs-btn__well {
+      transform: translate3d(3px, -1px, 0) scale(1.06);
+      background: rgba(255, 255, 255, 0.26);
+    }
+  }
+  .fs-btn--lg .fs-btn__well {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+  }
+  .fs-btn--sm .fs-btn__well {
+    width: 26px;
+    height: 26px;
+    flex-basis: 26px;
+  }
+
+  /* Give every button real mass. */
+  .fs-btn {
+    transition: transform var(--d-base) var(--ease-fluid),
+      border-color var(--d-base) var(--ease-fluid), color var(--d-base) var(--ease-fluid),
+      box-shadow var(--d-base) var(--ease-fluid);
+  }
+  .fs-btn--primary {
+    box-shadow: var(--inset-hi), var(--shadow-ambient);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .fs-btn--primary:hover {
+      box-shadow: var(--inset-hi), var(--shadow-raised);
+    }
+  }
+
+  /* ---------------------------------------------------------- eyebrow pill */
+  .fs-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s2);
+    padding: 5px var(--s3);
+    border-radius: var(--radius-full);
+    background: var(--bezel-shell);
+    box-shadow: inset 0 0 0 1px var(--bezel-ring);
+    font-family: var(--font-mono);
+    font-size: var(--step--2);
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: var(--tracking-mono);
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .fs-eyebrow__dot {
+    width: 5px;
+    height: 5px;
+    border-radius: var(--radius-full);
+    background: var(--accent);
+  }
+
+  /* ------------------------------------------------------- floating island */
+  /* The nav detaches from the top edge and floats as a pill. Backdrop blur is
+     safe here precisely because the element never scrolls. */
+  .fs-island {
+    position: sticky;
+    top: var(--s3);
+    z-index: 60;
+    width: calc(100% - 2 * var(--gutter));
+    max-width: calc(var(--container) - 2 * var(--gutter));
+    margin: var(--s3) auto 0;
+    padding: var(--bezel-pad);
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    box-shadow: inset 0 0 0 1px var(--bezel-ring), var(--inset-hi);
+    transition: box-shadow var(--d-lux) var(--ease-fluid),
+      background-color var(--d-lux) var(--ease-fluid);
+  }
+  @media (min-width: 768px) {
+    .fs-island {
+      top: var(--s4);
+      margin-top: var(--s4);
+    }
+  }
+  .fs-island[data-scrolled='true'] {
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    box-shadow: inset 0 0 0 1px var(--bezel-ring), var(--inset-hi), var(--shadow-raised);
+  }
+  /* On phones the blur re-samples everything that scrolls beneath the pill on
+     every frame. A near-opaque fill reads the same and costs nothing. */
+  @media (max-width: 767.98px) {
+    .fs-island,
+    .fs-island[data-scrolled='true'] {
+      background: color-mix(in srgb, var(--bg) 95%, transparent);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+  }
+  .fs-island__inner {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--s4);
+    padding: 0 var(--s1) 0 var(--s4);
+    min-height: 48px;
+  }
+  @media (min-width: 768px) {
+    .fs-island__inner {
+      gap: var(--s5);
+      padding-left: var(--s5);
+      min-height: 52px;
+    }
+  }
+
+  /* ------------------------------------------------------- hamburger morph */
+  .fs-burger {
+    position: relative;
+    width: var(--tap);
+    height: var(--tap);
+    border: 0;
+    border-radius: var(--radius-full);
+    background: var(--bezel-shell);
+    box-shadow: inset 0 0 0 1px var(--bezel-ring);
+    cursor: pointer;
+    color: var(--text);
+  }
+  .fs-burger span {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    height: 1.5px;
+    background: currentColor;
+    border-radius: 2px;
+    transition: transform var(--d-base) var(--ease-fluid),
+      opacity var(--d-fast) var(--ease-fluid);
+  }
+  .fs-burger span:nth-child(1) {
+    top: 18.5px;
+  }
+  .fs-burger span:nth-child(2) {
+    top: 24.5px;
+  }
+  .fs-burger[aria-expanded='true'] span:nth-child(1) {
+    transform: translateY(3px) rotate(45deg);
+  }
+  .fs-burger[aria-expanded='true'] span:nth-child(2) {
+    transform: translateY(-3px) rotate(-45deg);
+  }
+
+  /* ------------------------------------------------------------ film grain */
+  /* Fixed and pointer-events-none, so it paints once. Attaching this to a
+     scrolling container would repaint it every frame. */
+  .fs-grain {
+    position: fixed;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    opacity: var(--grain-opacity);
+    /* No mix-blend-mode: a fixed, full-viewport blended element forces the
+       entire page into a single compositing group, which is one of the more
+       expensive things a background can do. At this opacity plain alpha is
+       indistinguishable. */
+  }
+  /* Touch devices are mostly phones, where a full-viewport overlay is a real
+     compositing cost for an effect nobody can see at arm's length. */
+  @media (pointer: coarse) {
+    .fs-grain,
+    .fs-spot {
+      display: none;
+    }
+  }
+
+  /* --------------------------------------------------- interactive backdrop */
+  /* The washes are drawn into a ~220px canvas and stretched over the viewport
+     (see src/ui/Atmosphere.tsx). The previous version used two 70vmax divs
+     under `filter: blur(80px)`, which re-rasterised a ~1400x1400 layer every
+     frame and was what made the page stutter. Nothing here filters anything. */
+  .fs-ambient-canvas {
+    opacity: 0.9;
+  }
+
+  /* Blueprint dot field — a repeating background-image, so it costs one
+     paint and never repaints. */
+  .fs-dots {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: radial-gradient(circle at 1px 1px, var(--hairline) 1px, transparent 0);
+    background-size: 26px 26px;
+    opacity: 0.55;
+    mask-image: radial-gradient(120% 90% at 50% 0%, #000 30%, transparent 78%);
+  }
+
+  /* The pointer spotlight: a 640px gradient disc moved by transform only.
+     It brightens the dots beneath it, which is what makes the grid feel
+     reactive without touching a single dot element. */
+  .fs-spot {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 640px;
+    height: 640px;
+    z-index: 0;
+    pointer-events: none;
+    will-change: transform;
+    background: radial-gradient(
+      circle,
+      color-mix(in srgb, var(--accent) 16%, transparent) 0%,
+      transparent 62%
+    );
+  }
+  .fs-spot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle at 1px 1px, var(--border-strong) 1px, transparent 0);
+    background-size: 26px 26px;
+    mask-image: radial-gradient(circle, #000 0%, transparent 58%);
+    opacity: 0.7;
+  }
+
+  /* Page content sits above the ambient wash. */
+  .fs-above {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ------------------------------------------------------- refined surfaces */
+  /* Cards were flat with a 1px border. Give them the same physical treatment
+     without touching the original rule. */
+  .fs-card {
+    border-color: transparent;
+    border-radius: var(--radius-xl);
+    box-shadow: inset 0 0 0 1px var(--bezel-ring), var(--inset-hi), var(--shadow-ambient);
+    transition: box-shadow var(--d-lux) var(--ease-fluid), transform var(--d-lux) var(--ease-fluid);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .fs-card--interactive:hover {
+      transform: translate3d(0, -3px, 0);
+      box-shadow: inset 0 0 0 1px var(--bezel-ring), var(--inset-hi), var(--shadow-raised);
+    }
+  }
+
+  .fs-input,
+  .fs-textarea,
+  .fs-select {
+    border-color: transparent;
+    border-radius: var(--radius-xl);
+    box-shadow: inset 0 0 0 1px var(--bezel-ring), inset 0 1px 2px rgba(74, 53, 41, 0.04);
+    transition: box-shadow var(--d-base) var(--ease-fluid);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .fs-input:hover,
+    .fs-textarea:hover,
+    .fs-select:hover {
+      box-shadow: inset 0 0 0 1px var(--border-strong), inset 0 1px 2px rgba(74, 53, 41, 0.05);
+    }
+  }
+  .fs-input[aria-invalid='true'],
+  .fs-textarea[aria-invalid='true'],
+  .fs-select[aria-invalid='true'] {
+    box-shadow: inset 0 0 0 1.5px var(--err);
+  }
+  /* The inset ring already clears 3:1 against the field, so the global
+     2px outline would only double it. */
+  .fs-input:focus-visible,
+  .fs-textarea:focus-visible,
+  .fs-select:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1.5px var(--focus);
+  }
+
+  .fs-chip {
+    border-color: transparent;
+    box-shadow: inset 0 0 0 1px var(--bezel-ring);
+    transition: color var(--d-base) var(--ease-fluid), box-shadow var(--d-base) var(--ease-fluid),
+      background-color var(--d-base) var(--ease-fluid), transform var(--d-base) var(--ease-fluid);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .fs-chip:hover {
+      transform: translate3d(0, -1px, 0);
+      box-shadow: inset 0 0 0 1px var(--border-strong);
+    }
+  }
+  .fs-chip[aria-pressed='true'],
+  .fs-chip[data-selected='true'] {
+    box-shadow: var(--inset-hi), var(--shadow-ambient);
+  }
+
+  /* Press feedback, after every hover lift so a press always wins. */
+  .fs-chip:active,
+  .fs-card--interactive:active {
+    transform: scale(0.98);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* The backdrop's own motion is handled in Atmosphere.tsx: it draws a
+       single static frame and never starts a loop. */
+    .fs-spot {
+      display: none;
+    }
+    .fs-bezel--interactive:hover,
+    .fs-card--interactive:hover,
+    .fs-chip:hover {
+      transform: none;
+    }
+  }
+}

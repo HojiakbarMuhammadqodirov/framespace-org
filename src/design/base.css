@@ -1,0 +1,307 @@
+/* Base layer for the new design system. Owns nothing the legacy screens rely
+ * on: the old index.css keeps its own @theme names (ink / cream / clay) and
+ * its .card/.btn/.field classes, and the legacy app is wrapped in
+ * `.legacy-root` which restores its dark surface. */
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Fallback until the Header measures itself and writes the real value:
+     island top inset + pill height + breathing room. Sticky elements and
+     scroll-margin use this so nothing slides under the header. */
+  :root {
+    --hdr-offset: calc(var(--s4) + 56px + var(--s3));
+  }
+
+  /* One stray 101vw element should not give the whole page a sideways
+     wobble on phones. `clip` rather than `hidden` so sticky still works. */
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: var(--step-0);
+    line-height: var(--lh-body);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--selection);
+  }
+
+  /* Visible focus, keyboard only — brief §11. */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Playfair carries the headlines at a book weight; it gets heavier, not
+     better, past 500. Section and card headings at smaller sizes need air,
+     or Cyrillic caps and Uzbek apostrophes collide between lines. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: var(--fw-heading);
+    letter-spacing: var(--tracking-heading);
+    line-height: var(--lh-tight);
+    margin: 0;
+    color: var(--text-strong);
+    text-wrap: balance;
+    font-kerning: normal;
+    font-variant-ligatures: common-ligatures;
+  }
+  h1,
+  h2 {
+    font-weight: var(--fw-display);
+    letter-spacing: var(--tracking-display);
+  }
+  h1 {
+    line-height: var(--lh-display);
+  }
+
+  /* The accent word in a headline: Playfair's italic, in the ink accent.
+     Written in the copy as *word* and rendered by ui/Accent. */
+  h1 em,
+  h2 em,
+  h3 em,
+  .fs-accent {
+    font-style: italic;
+    font-weight: inherit;
+    color: var(--accent-ink);
+    letter-spacing: -0.005em;
+  }
+
+  p {
+    margin: 0;
+    max-width: 68ch;
+    text-wrap: pretty;
+  }
+
+  /* Figures in the UI face line up in tables and price columns. */
+  body {
+    font-variant-numeric: lining-nums;
+  }
+
+  img,
+  svg,
+  video,
+  canvas {
+    display: block;
+    max-width: 100%;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+@layer components {
+  /* ---- layout ---------------------------------------------------------- */
+  .fs-container {
+    width: 100%;
+    max-width: var(--container);
+    margin-inline: auto;
+    padding-inline: var(--gutter);
+  }
+
+  /* The 12-column editorial grid from §2. Collapses to 4 on phones so the
+     asymmetric column spans still mean something. */
+  .fs-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--s4);
+  }
+  @media (min-width: 768px) {
+    .fs-grid {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: var(--s6);
+    }
+  }
+
+  /* ---- type -------------------------------------------------------------*/
+  .fs-display {
+    font-family: var(--font-display);
+    font-size: var(--step-4);
+    font-weight: var(--fw-display);
+    line-height: var(--lh-display);
+    letter-spacing: var(--tracking-display);
+    color: var(--text-strong);
+    text-wrap: balance;
+  }
+  /* Cyrillic caps and descenders need more leading than Latin at display
+     sizes. Lives in the components layer so it beats the base h1 rule. */
+  :lang(ru) .fs-display,
+  :lang(ru) .fs-h2,
+  :lang(ru) h1 {
+    line-height: 1.1;
+  }
+
+  /* The one section-headline style for every landing block: eyebrow, then
+     this, then .fs-lead. Kept as a class so a section can use an h2 or an h3
+     depending on where it is mounted. */
+  .fs-h2 {
+    font-family: var(--font-display);
+    font-size: var(--step-4);
+    font-weight: var(--fw-display);
+    line-height: var(--lh-display);
+    letter-spacing: var(--tracking-display);
+    color: var(--text-strong);
+    text-wrap: balance;
+    max-width: 17ch;
+  }
+  :lang(ru) .fs-h2 {
+    max-width: 19ch;
+  }
+  .fs-h3 {
+    font-family: var(--font-display);
+    font-size: var(--step-2);
+    font-weight: var(--fw-heading);
+    line-height: var(--lh-tight);
+    letter-spacing: var(--tracking-heading);
+    color: var(--text-strong);
+  }
+
+  /* Eyebrow → headline → lead, with the same rhythm in every section. */
+  .fs-sec-head {
+    display: grid;
+    gap: var(--s5);
+    align-items: end;
+  }
+  .fs-sec-head__main {
+    display: grid;
+    gap: var(--s4);
+    justify-items: start;
+  }
+  @media (min-width: 768px) {
+    .fs-sec-head {
+      grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+      gap: var(--s10);
+    }
+    .fs-sec-head__main {
+      gap: var(--s5);
+    }
+  }
+
+  .fs-lead {
+    font-size: var(--step-1);
+    line-height: 1.6;
+    color: var(--text-muted);
+    text-wrap: pretty;
+  }
+
+  /* "01 — XONA". The section marker from §2. */
+  .fs-label {
+    font-family: var(--font-mono);
+    font-size: var(--step--2);
+    font-weight: 500;
+    letter-spacing: var(--tracking-mono);
+    text-transform: uppercase;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s2);
+  }
+
+  /* Visually hidden, still read by assistive tech. */
+  .sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    clip-path: inset(50%) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+  }
+
+  /* ---- technical-drawing rules ------------------------------------------*/
+  .fs-rule {
+    border: 0;
+    border-top: 1px solid var(--hairline);
+    margin: 0;
+  }
+
+  .fs-rule-strong {
+    border: 0;
+    border-top: 1px solid var(--border-strong);
+    margin: 0;
+  }
+
+  /* ---- skeletons (never a bare spinner — §3) --------------------------- */
+  .fs-skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--bg-sunken) 0%,
+      color-mix(in srgb, var(--bg-sunken) 60%, var(--bg-raised)) 45%,
+      var(--bg-sunken) 90%
+    );
+    background-size: 420px 100%;
+    animation: fs-shimmer 1.5s linear infinite;
+    border-radius: var(--radius-sm);
+  }
+
+  @keyframes fs-shimmer {
+    from {
+      background-position: -420px 0;
+    }
+    to {
+      background-position: 420px 0;
+    }
+  }
+
+  /* Thin top progress bar in the accent — §3 loading states. */
+  .fs-progress {
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: 2px;
+    background: var(--accent);
+    transform-origin: 0 50%;
+    z-index: 100;
+  }
+
+  /* ---- legacy quarantine ------------------------------------------------*/
+  /* The pre-redesign screens still render under `/legacy` and expect the old
+     dark surface that index.css used to put on <body>. */
+  .legacy-root {
+    min-height: 100%;
+    background: var(--color-ink, #12100e);
+    color: var(--color-cream, #f4efe7);
+    color-scheme: dark;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fs-skeleton {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* The custom cursor was removed, so nothing hides the native pointer any
+   more. The rule is gone rather than left dormant: a stray `data-cursor="on"`
+   would otherwise blank the cursor across the whole page. */

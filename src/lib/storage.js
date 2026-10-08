@@ -9,7 +9,8 @@ const MAX_PROJECTS = 12
 export function loadProjects() {
   try {
     const raw = localStorage.getItem(KEY)
-    return raw ? JSON.parse(raw) : []
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed.filter((p) => p && typeof p === 'object') : []
   } catch {
     return []
   }
@@ -48,9 +49,17 @@ export function saveProject(project) {
 }
 
 export function deleteProject(id) {
-  write(loadProjects().filter((p) => p.id !== id))
+  try {
+    write(loadProjects().filter((p) => p.id !== id))
+  } catch {
+    // Storage blocked: nothing was written there either.
+  }
 }
 
 export function clearProjects() {
-  localStorage.removeItem(KEY)
+  try {
+    localStorage.removeItem(KEY)
+  } catch {
+    // Storage blocked.
+  }
 }

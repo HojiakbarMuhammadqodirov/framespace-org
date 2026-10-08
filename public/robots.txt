@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# The signed-in app and the business dashboard hold nothing a crawler should index.
+Disallow: /app/
+Disallow: /business/
+Disallow: /styleguide
+Disallow: /legacy
+
+Sitemap: https://framespace.uz/sitemap.xml

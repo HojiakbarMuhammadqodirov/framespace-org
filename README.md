@@ -14,24 +14,26 @@ cp .env.example .env      # optional — see Demo mode below
 npm run dev
 ```
 
-`npm run dev` starts both halves: the Vite frontend on **:5173** and the API on
-**:8787**, with `/api` proxied across. Open <http://localhost:5173>.
+`npm run dev` starts both halves: the Vite frontend on **:5180** and the API on
+**:8787**, with `/api` proxied across. Open <http://localhost:5180>.
 
 To use it on your actual phone (which is the point — you need a camera), find
-your machine's LAN address and open `http://<that-address>:5173` on the phone
+your machine's LAN address and open `http://<that-address>:5180` on the phone
 over the same Wi-Fi. Vite is already bound to all interfaces.
 
 > Camera capture requires a secure context. `localhost` counts; a bare LAN IP
 > does not on iOS. If the camera button opens the photo library instead of the
-> camera, put the dev server behind HTTPS (`ngrok http 5173`, or Vite's
+> camera, put the dev server behind HTTPS (`ngrok http 5180`, or Vite's
 > `--https` with a trusted cert) and use that URL.
 
 ### Demo mode
 
 With no API keys set, the whole app still works end to end — capture, styles,
 budget arithmetic, the results screen and the 3D view. Only the renders are
-faked, as generated SVG room illustrations in your chosen palette. The server
-prints `DEMO MODE` at boot so you know which you're in.
+faked, as eye-level perspective SVG illustrations (floor boards, rug, soft
+shadows, daylight, every placed piece of furniture) in your chosen palette, and
+the design brief is written in the requested language (uz / ru / en). The
+server prints `DEMO MODE` at boot so you know which you're in.
 
 ### Going live
 
@@ -43,8 +45,61 @@ prints `DEMO MODE` at boot so you know which you're in.
 Both go in `.env`. They never reach the browser — every model call is made by
 the Node server.
 
-Model IDs are overridable via `CLAUDE_MODEL` and `GEMINI_IMAGE_MODEL` if you
-want to pin or swap either one.
+Model IDs are overridable via `CLAUDE_MODEL` (default `claude-sonnet-5-5`) and
+`GEMINI_IMAGE_MODEL` (default `gemini-3-pro-image-preview`). All server settings
+are listed in `.env.example`.
+
+## API
+
+All responses are JSON. Errors are always `{ error, code?, fields? }` — never an
+HTML page or a stack trace. Unknown `/api/*` routes return 404 JSON.
+
+| Route | Body | Success |
+| --- | --- | --- |
+| `GET /api/health` | — | `{ ok, demoMode, providers, models, uptimeS }` |
+| `GET /api/angles` | — | `{ angles, requiredAngleIds }` |
+| `POST /api/auth/signup` | `{ name, email, password }` | 201 `{ user }` + `fs_session` cookie |
+| `POST /api/auth/login` | `{ email, password }` | 200 `{ user }` + cookie |
+| `POST /api/auth/logout` | — | 204, cookie cleared |
+| `GET /api/auth/me` | — | 200 `{ user }` (`user: null` for guests) |
+| `POST /api/render` | `{ photos:[{angleId,data,mediaType}], style, budget?, notes?, locale? }` | `{ demoMode, style, locale, brief, renders, failures, elapsedMs }` |
+| `POST /api/render-scene` | the 3D builder's `ScenePayload` (`src/features/room-builder/payload.ts`, includes `locale`) | same shape as `/api/render`, plus `warnings` |
+| `POST /api/contact` | `{ name?, email, message }` | `{ ok: true }` |
+
+**Language.** Both render routes take `locale` (`uz` | `ru` | `en`); without it
+the server uses the first supported language in `Accept-Language`, then `uz`.
+The response echoes the resolved `locale`. Every user-facing string in the brief
+(summary, palette names and usage, materials, lighting, features, furniture
+names, descriptions and placements, budget notes, `angleLabel`) and the
+provider warnings come back in that language — from Claude when it is
+configured, from `server/i18n.js` in demo mode. Image prompts stay in English.
+
+`user` is `{ id, name, email, createdAt }`. Error codes: `validation` (400, with
+a `fields` map), `invalid_json` (400), `invalid_credentials` (401),
+`unauthenticated` (401), `email_taken` (409), `payload_too_large` (413),
+`rate_limited` (429, with `Retry-After`), `provider_error` (502/422),
+`provider_busy` (503), `provider_timeout` / `timeout` (504), `not_found` (404).
+
+**Accounts.** Stored in `server/data/auth.json` (override with `DATA_DIR`;
+git-ignored), written atomically. Passwords are hashed with scrypt and a
+per-user salt; sessions are random 256-bit tokens kept in an httpOnly,
+SameSite=Lax cookie (Secure in production) and stored server-side only as a
+SHA-256 hash, valid for 30 days. Sign-up and sign-in are rate-limited per IP and
+per email.
+
+**Hardening.** Per-route body limits (30 MB for `/api/render*`, 1 MB elsewhere),
+a per-IP limit on `/api/render*` (`RENDER_RATE_LIMIT` per 10 min), request
+deadlines, security headers, one log line per API request, retries with
+exponential backoff on provider 429/5xx, and graceful shutdown on SIGINT/SIGTERM.
+CORS is off unless `CORS_ORIGINS` is set (dev uses the Vite proxy).
+
+**3D builder renders.** `/api/render-scene` keeps the user's furniture and
+catalogue prices as the costed list. With a Claude key, Claude writes the
+design, product descriptions and one text-to-image prompt per wall view; with a
+Gemini key each view is generated from that prompt. Any view that fails is
+replaced by a perspective drawing of the actual scene (`render.fallback: true`,
+also listed in `failures`). In demo mode every view is that drawing: the real
+footprint, windows, doors and furniture, in the style's palette and lighting.
 
 ## Production build
 
@@ -91,11 +146,19 @@ photogrammetry, and a true walk-through would need a different capture method.
 
 ```
 server/
-  index.js      Express API, request validation, budget recomputation
-  claude.js     design brief — vision + structured outputs
-  gemini.js     image-to-image restyling, parallel across angles
+  index.js      Express app: routes, validation, budget recomputation, lifecycle
+  auth.js       accounts + sessions (scrypt, httpOnly cookie, JSON store)
+  scene.js      3D builder scene validation and plain-language description
+  sceneDemo.js  scene brief without keys (renders via roomSvg.js)
+  roomSvg.js    demo renderer: one-point-perspective SVG room illustrations
+  i18n.js       uz / ru / en copy for demo briefs and warnings, locale resolution
+  palettes.js   per-style colour palettes
+  claude.js     design briefs — vision + structured outputs (photos and scenes)
+  gemini.js     image-to-image restyling and text-to-image scene views
   angles.js     the capture plan (shared with the frontend)
   demo.js       key-free fallback so the app is always clickable
+  lib/          http helpers (errors, rate limit, headers, logging),
+                retry/backoff, atomic JSON store
 src/
   App.jsx       screen state machine
   components/   TabBar (4 tabs + the camera circle), header, icons
@@ -114,6 +177,9 @@ angle is a one-line change that both halves pick up.
 - The Archive lives in `localStorage`, which means it is per-device and capped
   by the browser's storage quota. Renders are large; the app evicts the oldest
   project rather than failing the save.
+- Accounts, sessions and contact messages live in JSON files under
+  `server/data/` — fine for one process; move to a database before scaling out.
+  Rate limits are in-memory per process for the same reason.
 - Contact messages append to `server/data/messages.json`. Point it at email or
   a ticketing tool before you take real traffic.
 - News content is authored in `src/screens/News.jsx`. Swap the array for a feed
