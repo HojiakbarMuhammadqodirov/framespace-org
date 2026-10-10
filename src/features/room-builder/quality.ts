@@ -28,6 +28,7 @@ export interface QualitySettings {
 }
 
 export const QUALITY: Record<QualityTier, QualitySettings> = {
-  high: { shadows: true, shadowMap: 1024, segments: 20, detail: true },
+  // 2048: the sun patch through a window needs crisp glazing-bar shadows.
+  high: { shadows: true, shadowMap: 2048, segments: 20, detail: true },
   low: { shadows: false, shadowMap: 512, segments: 8, detail: false },
 }
