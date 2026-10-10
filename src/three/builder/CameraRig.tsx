@@ -162,7 +162,8 @@ export function CameraRig() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault fov={FOV} near={0.1} far={90} />
+      {/* far: the projected garden is a 60 m dome round the room. */}
+      <PerspectiveCamera makeDefault fov={FOV} near={0.1} far={160} />
       <OrbitControls
         makeDefault
         enableDamping

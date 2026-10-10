@@ -17,6 +17,17 @@ import { DustMotes } from './effects/DustMotes'
 import { LightShaft } from './effects/LightShaft'
 import { detectSceneTier } from './effects/quality'
 import { SoftEnvironment, ToneMapping } from './effects/Studio'
+import { OutdoorEnvironment } from './environment/OutdoorEnvironment'
+import { STYLE_FINISH, skyRotationFor, type SurfaceId } from './environment/catalog'
+import {
+  applySurface,
+  createGlassMaterial,
+  createSurfaceMaterial,
+  loadSurface,
+  peekSurface,
+  surfaceOf,
+  type SurfaceSize,
+} from './environment/surfaces'
 import { GeoCache } from './furniture/geometry'
 import {
   art,
@@ -223,18 +234,56 @@ function createGeometries() {
   }
 }
 
+/** The real surfaces a style's room wears: its floor, plaster, oak veneer. */
+function finishSurfaces(styleKey: RoomStyleKey): SurfaceId[] {
+  return [STYLE_FINISH[styleKey].floor, 'plaster', 'veneer-oak']
+}
+
+const surfaceSize = (tier: Tier): SurfaceSize => (tier === 'high' ? 2048 : 1024)
+
+function loadFinish(styleKey: RoomStyleKey, tier: Tier) {
+  return Promise.all(
+    finishSurfaces(styleKey).map((id) => loadSurface(id, id.startsWith('floor') ? surfaceSize(tier) : 1024)),
+  )
+}
+
+/**
+ * Dresses the shell in whichever real surfaces have already arrived. Cheap
+ * and idempotent: a material already wearing the right set is left alone.
+ */
+function dressShell(m: Mats, styleKey: RoomStyleKey, tier: Tier, anisotropy: number) {
+  const finish = STYLE_FINISH[styleKey]
+  const floor = peekSurface(finish.floor, surfaceSize(tier))
+  if (floor && surfaceOf(m.floor) !== floor.id) {
+    applySurface(m.floor, floor, { sheen: finish.floorSheen, anisotropy })
+  }
+  const plaster = peekSurface('plaster', 1024)
+  if (plaster) {
+    if (!surfaceOf(m.wall)) applySurface(m.wall, plaster, { anisotropy: 4 })
+    // Ceilings are skimmed smoother and seen edge-on: a larger, softer figure.
+    if (!surfaceOf(m.ceiling)) applySurface(m.ceiling, plaster, { anisotropy: 4, scale: 1.6 })
+    // The wainscot board is painted: the same plaster figure, finer and satin.
+    if (!surfaceOf(m.wallLower)) applySurface(m.wallLower, plaster, { anisotropy: 4, scale: 0.6, sheen: 0.7 })
+  }
+  const veneer = peekSurface('veneer-oak', 1024)
+  if (veneer) {
+    if (!surfaceOf(m.frame)) applySurface(m.frame, veneer, { anisotropy: 4, scale: 0.5 })
+  }
+}
+
 function createMaterials(style: RoomStyle, styleKey: RoomStyleKey, tier: Tier) {
   const c = style.colors
 
-  const floorMat = wood(c.floor, tier, [3, 7])
-  // Floors are satin, not mirror: kill most of the clearcoat on the boards.
-  const floorPhysical = floorMat as Partial<THREE.MeshPhysicalMaterial>
-  // A soft satin sheen, enough to pick up the window and ground the pieces.
-  if (typeof floorPhysical.clearcoat === 'number') {
-    floorPhysical.clearcoat = 0.4
-    floorPhysical.clearcoatRoughness = 0.22
-  }
-  floorMat.roughness = 0.55
+  // Real boards (see environment/catalog.ts). A thin satin coat on the high
+  // tier picks up the window the way a waxed floor does.
+  const floorMat = createSurfaceMaterial({
+    color: c.floor,
+    roughness: 0.55,
+    clearcoat: tier === 'high' ? 0.22 : 0,
+    clearcoatRoughness: 0.32,
+    // Indoors the boards mirror the room, not the sky the HDR knows.
+    envMapIntensity: 0.6,
+  })
 
   const rugMat = rug(c.rug, 'plain', tier)
   const motif = new THREE.MeshStandardMaterial({
@@ -256,9 +305,12 @@ function createMaterials(style: RoomStyle, styleKey: RoomStyleKey, tier: Tier) {
   shadeMat.emissiveIntensity = 0.55
 
   return {
-    wall: matte(c.wall, 0.96),
-    wallLower: matte(c.wallLower, 0.9),
-    ceiling: matte(c.ceiling, 1),
+    wall: createSurfaceMaterial({ color: c.wall, roughness: 0.92, normalScale: 0.55 }),
+    wallLower: createSurfaceMaterial({ color: c.wallLower, roughness: 0.7, normalScale: 0.35 }),
+    ceiling: createSurfaceMaterial({ color: c.ceiling, roughness: 0.95, normalScale: 0.3 }),
+    /** Window frames, stool and casing: oiled oak in the palette's wood tone. */
+    frame: createSurfaceMaterial({ color: c.wood, roughness: 0.6, normalScale: 0.5 }),
+    glass: createGlassMaterial(),
     floor: floorMat,
     rug: rugMat,
     rugPattern: motif,
@@ -293,6 +345,7 @@ const MATERIAL_ROLE: Partial<Record<MatKey, ColorRole>> = {
   sofa: 'sofa',
   cushion: 'cushion',
   wood: 'wood',
+  frame: 'wood',
   metal: 'metal',
   plant: 'plant',
   pot: 'pot',
@@ -381,7 +434,9 @@ function Shell() {
   return (
     <group>
       <Panel mat="floor" position={[0, 0, 0]} scale={[ROOM.w, ROOM.d, 1]} rotation={[-Math.PI / 2, 0, 0]} />
-      <Panel mat="ceiling" position={[0, ROOM.h, 0]} scale={[ROOM.w, ROOM.d, 1]} rotation={[Math.PI / 2, 0, 0]} />
+      {/* The ceiling casts: without it the sun pours in over the wall top and
+          the window would not be the only way light gets in. */}
+      <Panel mat="ceiling" position={[0, ROOM.h, 0]} scale={[ROOM.w, ROOM.d, 1]} rotation={[Math.PI / 2, 0, 0]} cast />
       <Panel mat="wall" position={[0, ROOM.h / 2, BACK_Z]} scale={[ROOM.w, ROOM.h, 1]} />
       {/* Wainscot as a real 2 cm board with a cap rail, not a coplanar decal. */}
       <Box mat="wallLower" position={[0, 0.55, BACK_Z + 0.01]} scale={[ROOM.w, 1.1, 0.02]} cast={false} />
@@ -434,25 +489,54 @@ function Shell() {
   )
 }
 
+/** Depth of the window reveal: a real masonry wall, not a sheet of paper. */
+const REVEAL = 0.26
+/** The frame sits a third of the way into the reveal, as it does in a house. */
+const FRAME_X = WALL_X - REVEAL * 0.38
+
 function Window() {
+  const { geo, mats } = useKit()
   const w = WIN.z1 - WIN.z0
   const h = WIN.y1 - WIN.y0
+  const f = 0.065 // frame face width
+  const sash = 0.045 // mullion / transom
+  const transomY = WIN.y0 + h * 0.66
   return (
     <group>
-      {/* Sky plane sits just outside the opening and is unlit, so it reads as light. */}
-      <Panel
-        mat="glow"
-        position={[WALL_X - 0.14, WIN_Y, WIN_Z]}
-        scale={[w + 0.1, h + 0.1, 1]}
+      {/* Reveal: plaster returns on all four sides of the opening. They cast,
+          so the sun patch on the floor gets the opening's true soft edges. */}
+      <Box mat="wall" position={[WALL_X - REVEAL / 2, WIN.y0 - 0.01, WIN_Z]} scale={[REVEAL, 0.02, w]} />
+      <Box mat="wall" position={[WALL_X - REVEAL / 2, WIN.y1 + 0.01, WIN_Z]} scale={[REVEAL, 0.02, w]} />
+      <Box mat="wall" position={[WALL_X - REVEAL / 2, WIN_Y, WIN.z0 - 0.01]} scale={[REVEAL, h + 0.04, 0.02]} />
+      <Box mat="wall" position={[WALL_X - REVEAL / 2, WIN_Y, WIN.z1 + 0.01]} scale={[REVEAL, h + 0.04, 0.02]} />
+
+      {/* Frame, mullion and transom: oak, in the palette's wood tone. */}
+      <Box mat="frame" position={[FRAME_X, WIN.y1 - f / 2, WIN_Z]} scale={[0.07, f, w]} />
+      <Box mat="frame" position={[FRAME_X, WIN.y0 + f / 2, WIN_Z]} scale={[0.07, f, w]} />
+      <Box mat="frame" position={[FRAME_X, WIN_Y, WIN.z0 + f / 2]} scale={[0.07, h, f]} />
+      <Box mat="frame" position={[FRAME_X, WIN_Y, WIN.z1 - f / 2]} scale={[0.07, h, f]} />
+      <Box mat="frame" position={[FRAME_X + 0.005, WIN_Y, WIN_Z]} scale={[0.06, h - f * 2, sash]} />
+      <Box mat="frame" position={[FRAME_X + 0.005, transomY, WIN_Z]} scale={[0.06, sash, w - f * 2]} />
+
+      {/* Glass: reflection only, the garden shows through untouched. */}
+      <mesh
+        geometry={geo.plane}
+        material={mats.glass}
+        position={[FRAME_X, WIN_Y, WIN_Z]}
         rotation={[0, Math.PI / 2, 0]}
-        receive={false}
+        scale={[w - f * 2, h - f * 2, 1]}
+        renderOrder={2}
       />
-      <Box mat="wood" position={[WALL_X + 0.05, WIN.y0 - 0.02, WIN_Z]} scale={[0.16, 0.04, w + 0.16]} cast={false} />
-      <Box mat="wood" position={[WALL_X + 0.03, WIN.y1, WIN_Z]} scale={[0.1, 0.07, w + 0.1]} cast={false} />
-      <Box mat="wood" position={[WALL_X + 0.03, WIN_Y, WIN.z0]} scale={[0.1, h, 0.07]} cast={false} />
-      <Box mat="wood" position={[WALL_X + 0.03, WIN_Y, WIN.z1]} scale={[0.1, h, 0.07]} cast={false} />
-      <Box mat="wood" position={[WALL_X + 0.03, WIN_Y, WIN_Z]} scale={[0.05, h, 0.04]} cast={false} />
-      <Box mat="wood" position={[WALL_X + 0.03, WIN.y0 + h * 0.62, WIN_Z]} scale={[0.05, 0.035, w]} cast={false} />
+
+      {/* Interior stool and casing. */}
+      <Box
+        mat="frame"
+        position={[WALL_X - REVEAL / 2 + 0.05, WIN.y0 - 0.018, WIN_Z]}
+        scale={[REVEAL + 0.1, 0.036, w + 0.16]}
+      />
+      <Box mat="frame" position={[WALL_X + 0.009, WIN.y1 + 0.04, WIN_Z]} scale={[0.018, 0.08, w + 0.16]} cast={false} />
+      <Box mat="frame" position={[WALL_X + 0.009, WIN_Y + 0.02, WIN.z0 - 0.04]} scale={[0.018, h + 0.04, 0.08]} cast={false} />
+      <Box mat="frame" position={[WALL_X + 0.009, WIN_Y + 0.02, WIN.z1 + 0.04]} scale={[0.018, h + 0.04, 0.08]} cast={false} />
     </group>
   )
 }
@@ -832,7 +916,12 @@ function useRefinement({
 
     const cancelRefine = idle(async () => {
       if (cancelled) return
+      // The full set is built already wearing its real surfaces, so their
+      // programs compile here, off the critical path, and never on swap.
+      await loadFinish(latest.current.key, 'high').catch(() => {})
+      if (cancelled) return
       built = createMaterials(latest.current.style, latest.current.key, 'high')
+      dressShell(built, latest.current.key, 'high', Math.min(8, gl.capabilities.getMaxAnisotropy()))
       const box = new THREE.BoxGeometry(0.01, 0.01, 0.01)
       const temp = new THREE.Scene()
       Object.values(built).forEach((m) => temp.add(new THREE.Mesh(box, m)))
@@ -862,6 +951,62 @@ function useRefinement({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled])
 }
+
+/**
+ * Keeps the shell dressed in the current style's real surfaces. A floor
+ * figure change (planks → herringbone) lands at the middle of the colour
+ * cross-fade rather than snapping at its start.
+ */
+function useShellFinish({
+  mats,
+  styleKey,
+  tier,
+  transitionMs,
+  waitForRefined,
+}: {
+  mats: Mats
+  styleKey: RoomStyleKey
+  tier: Tier
+  transitionMs: number
+  /** High tier: the refinement pass dresses the first set itself. */
+  waitForRefined: boolean
+}) {
+  const gl = useThree((s) => s.gl)
+  const invalidate = useThree((s) => s.invalidate)
+  const first = useRef(true)
+
+  useEffect(() => {
+    if (waitForRefined) return
+    let live = true
+    let timer = 0
+    const start = performance.now()
+    const midpoint = first.current ? 0 : transitionMs / 2
+    first.current = false
+    const anisotropy = Math.min(8, gl.capabilities.getMaxAnisotropy())
+    loadFinish(styleKey, tier)
+      .then(() => {
+        if (!live) return
+        const wait = Math.max(0, start + midpoint - performance.now())
+        timer = window.setTimeout(() => {
+          if (!live) return
+          dressShell(mats, styleKey, tier, anisotropy)
+          invalidate()
+        }, wait)
+      })
+      .catch(() => {
+        // Offline: the plain palette materials are a complete room on their own.
+      })
+    return () => {
+      live = false
+      window.clearTimeout(timer)
+    }
+  }, [mats, styleKey, tier, transitionMs, waitForRefined, gl, invalidate])
+}
+
+/** Where the sun comes from: low through the left-hand window. */
+const SUN_POS: V3 = [-6.5, 4.4, 1.4]
+/** Turns the garden photo so its sun stands where our sun light is. */
+const SKY_ROTATION = skyRotationFor('day', Math.atan2(SUN_POS[2], SUN_POS[0]))
 
 export function HeroRoom({ styleKey = 'japandi', autoRotate = true, transitionMs = 400 }: HeroRoomProps) {
   const reducedMotion = useSceneReducedMotion()
@@ -898,6 +1043,7 @@ export function HeroRoom({ styleKey = 'japandi', autoRotate = true, transitionMs
   useEffect(() => () => disposeMats(mats), [mats])
 
   useStyleTransition(mats, style, safeKey, transitionMs)
+  useShellFinish({ mats, styleKey: safeKey, tier, transitionMs, waitForRefined: tier === 'high' && !refined })
   const bakes = useShadowBakes(safeKey, Math.max(450, transitionMs))
 
   return (
@@ -911,22 +1057,34 @@ export function HeroRoom({ styleKey = 'japandi', autoRotate = true, transitionMs
         <ViewControls autoRotate={autoRotate && !reducedMotion} />
         <CameraBreath />
 
-        <ToneMapping mode="neutral" exposure={1.3} />
-        <SoftEnvironment mood="daylight" intensity={0.95} resolution={tier === 'low' ? 32 : 64} />
+        {/* Neutral, compared side by side with AgX and ACES on this room: AgX
+            washed the sun patch grey, ACES crushed the shade and shifted the
+            palette; Neutral keeps both the highlight roll-off and the colours. */}
+        <ToneMapping mode="neutral" exposure={1.15} />
+        {/* A real garden outside: lights every material and fills the window.
+            The procedural studio light stands in until it has loaded. */}
+        <OutdoorEnvironment
+          sky="day"
+          tier={tier}
+          rotation={SKY_ROTATION}
+          background="sphere"
+          environmentIntensity={0.45}
+          fallback={<SoftEnvironment mood="daylight" intensity={0.95} resolution={tier === 'low' ? 32 : 64} />}
+        />
 
-
-        {/* Sky-lit top, warm floor-bounce bottom. The environment carries most
-            of the fill now, so this stays low. */}
-        <hemisphereLight args={['#FFF6EA', '#D9C3A8', 0.95]} />
+        {/* Sky-lit top, warm floor-bounce bottom: what the IBL cannot know —
+            that this is a room, and most of its light has bounced once. */}
+        <hemisphereLight args={['#F3F1EC', '#D9C3A8', 0.3]} />
+        {/* The sun, through the window. */}
         <directionalLight
-          position={[-6.5, 4.4, 1.4]}
-          intensity={3.4}
-          color="#FFF1DC"
+          position={SUN_POS}
+          intensity={6.5}
+          color="#FFF0DA"
           castShadow
           shadow-mapSize={tier === 'low' ? [512, 512] : [2048, 2048]}
           shadow-bias={-0.0002}
           shadow-normalBias={0.03}
-          shadow-radius={4}
+          shadow-radius={5}
           shadow-camera-near={0.5}
           shadow-camera-far={20}
           shadow-camera-left={-5}
@@ -935,9 +1093,11 @@ export function HeroRoom({ styleKey = 'japandi', autoRotate = true, transitionMs
           shadow-camera-bottom={-5}
         />
         {/* Unshadowed fill from the open side, so front faces are not muddy. */}
-        <directionalLight position={[3, 2.6, 6]} intensity={0.75} color="#FFF4E6" />
-        {/* Ceiling bounce: daylight off a pale floor lifts the top of the room. */}
-        <pointLight position={[0, ROOM.h - 0.35, -0.8]} intensity={2.2} distance={7} decay={1.6} color="#FFF0DE" />
+        <directionalLight position={[3, 2.6, 6]} intensity={0.35} color="#F4F1EC" />
+        {/* Bounce off the sunlit boards: a warm lift just above the patch. */}
+        <pointLight position={[-0.9, 0.45, -1.0]} intensity={1.6} distance={4.5} decay={1.8} color="#FFE2C2" />
+        {/* Ceiling bounce: daylight off the floor lifts the top of the room. */}
+        <pointLight position={[0, ROOM.h - 0.35, -0.8]} intensity={1.2} distance={7} decay={1.6} color="#FFF3E6" />
 
         <Shell />
         <Window />
@@ -962,7 +1122,7 @@ export function HeroRoom({ styleKey = 'japandi', autoRotate = true, transitionMs
               frames={bakes}
               color="#140d07"
             />
-            <DustMotes center={[-1.6, 1.0, -0.8]} size={[1.8, 1.1, 1.3]} count={tier === 'low' ? 70 : 200} />
+            <DustMotes center={[-2.1, 1.1, -0.8]} size={[0.9, 0.75, 0.75]} count={tier === 'low' ? 40 : 90} opacity={0.2} />
             {tier !== 'low' && (
               <LightShaft origin={[-3.15, 1.575, -0.5]} target={[0.2, 0.05, -1.5]} width={1.7} opacity={0.07} />
             )}

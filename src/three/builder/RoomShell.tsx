@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 
-import { GRID, WALL_T, footprint } from '@/features/room-builder/geometry'
+import { FIXTURE_SIZE, GRID, WALL_T, footprint } from '@/features/room-builder/geometry'
 import { useBuilder } from '@/features/room-builder/store'
 import type { Wall, WallId } from '@/features/room-builder/types'
 import { DRAG_THRESHOLD_PX, armDrag } from './dragIntent'
@@ -104,18 +104,87 @@ function SettingOutGrid() {
 /** Half-width of the plan-view grab strip: 0.6 m in all, a fingertip at any zoom. */
 const STRIP = 0.6
 
+/** One solid piece of a wall, in wall-local metres (s along a→b, y up). */
+interface WallPiece {
+  s0: number
+  s1: number
+  y0: number
+  y1: number
+}
+
+/**
+ * Splits a wall around its window openings: full-height piers between them,
+ * and a spandrel below and a header above each one. Pure 1D bookkeeping on
+ * every change — no CSG — so a wall drag stays cheap. Windows get a real
+ * hole because that is what lets the sun and the garden in; doors stay a
+ * closed leaf on the face.
+ */
+function splitWall(length: number, height: number, openings: { s0: number; s1: number; y0: number; y1: number }[]): WallPiece[] {
+  const sorted = openings
+    .map((o) => ({ ...o, s0: Math.max(0, o.s0), s1: Math.min(length, o.s1) }))
+    .filter((o) => o.s1 - o.s0 > 0.05)
+    .sort((a, b) => a.s0 - b.s0)
+  // Overlapping windows merge into one opening.
+  const merged: typeof sorted = []
+  for (const o of sorted) {
+    const last = merged[merged.length - 1]
+    if (last && o.s0 <= last.s1) {
+      last.s1 = Math.max(last.s1, o.s1)
+      last.y0 = Math.min(last.y0, o.y0)
+      last.y1 = Math.max(last.y1, o.y1)
+    } else merged.push({ ...o })
+  }
+  const pieces: WallPiece[] = []
+  let cursor = 0
+  for (const o of merged) {
+    if (o.s0 - cursor > 1e-3) pieces.push({ s0: cursor, s1: o.s0, y0: 0, y1: height })
+    if (o.y0 > 1e-3) pieces.push({ s0: o.s0, s1: o.s1, y0: 0, y1: o.y0 })
+    if (height - o.y1 > 1e-3) pieces.push({ s0: o.s0, s1: o.s1, y0: Math.min(o.y1, height), y1: height })
+    cursor = o.s1
+  }
+  if (length - cursor > 1e-3) pieces.push({ s0: cursor, s1: length, y0: 0, y1: height })
+  return pieces
+}
+
+function useWallPieces(wall: Wall, height: number): WallPiece[] {
+  const fixtures = useBuilder((s) => s.scene.fixtures)
+  return useMemo(() => {
+    const size = FIXTURE_SIZE.window
+    const openings = fixtures
+      .filter((f) => f.kind === 'window' && f.wall === wall.id)
+      .map((f) => ({ s0: f.t - size.w / 2, s1: f.t + size.w / 2, y0: size.sill, y1: size.sill + size.h }))
+    return splitWall(wall.length, height, openings)
+  }, [fixtures, wall.id, wall.length, height])
+}
+
+function pieceTransform(wall: Wall, p: WallPiece) {
+  const s = (p.s0 + p.s1) / 2
+  return {
+    position: [
+      wall.a.x + wall.dx * s + (wall.nx * WALL_T) / 2,
+      (p.y0 + p.y1) / 2,
+      wall.a.z + wall.dz * s + (wall.nz * WALL_T) / 2,
+    ] as [number, number, number],
+    rotation: [0, wall.angle, 0] as [number, number, number],
+    scale: [p.s1 - p.s0, p.y1 - p.y0, WALL_T] as [number, number, number],
+  }
+}
+
+const noRaycast = () => {}
+
 function WallBox({
   wall,
   register,
 }: {
   wall: Wall
-  register: (id: WallId, mesh: THREE.Mesh | null) => void
+  register: (id: WallId, group: THREE.Object3D | null) => void
 }) {
   const { geo, mats } = useKit()
   const view = useBuilder((s) => s.view)
   const selection = useBuilder((s) => s.selection)
   const height = useBuilder((s) => s.scene.room.height)
-  const solid = useRef<THREE.Mesh | null>(null)
+  const solid = useRef<THREE.Group | null>(null)
+  const pieces = useWallPieces(wall, height)
 
   const selected = selection?.kind === 'wall' && selection.id === wall.id
   const grabbable = view === 'plan' && Boolean(wall.handle)
@@ -144,25 +213,36 @@ function WallBox({
     height / 2,
     wall.mid.z + (wall.nz * WALL_T) / 2,
   ]
+  const material = selected && view === 'plan' ? mats.handle : mats.wall
 
   return (
     <group>
-      <mesh
-        ref={(mesh) => {
-          solid.current = mesh
-          register(wall.id, mesh)
+      {/* What the camera sees. It never casts: the stand-ins below do, so a
+          wall hidden for the cut-away view still keeps the sun out. */}
+      <group
+        ref={(group) => {
+          solid.current = group
+          register(wall.id, group)
         }}
-        geometry={geo.box}
-        material={selected && view === 'plan' ? mats.handle : mats.wall}
-        position={centre}
-        rotation={[0, wall.angle, 0]}
-        scale={[wall.length, height, WALL_T]}
-        castShadow
-        receiveShadow
         onPointerDown={onDown}
         onPointerOver={grabbable ? () => void (document.body.style.cursor = cursor) : undefined}
         onPointerOut={grabbable ? () => void (document.body.style.cursor = '') : undefined}
-      />
+      >
+        {pieces.map((p, i) => (
+          <mesh key={i} geometry={geo.box} material={material} {...pieceTransform(wall, p)} receiveShadow />
+        ))}
+      </group>
+      {/* Shadow-only twins: invisible to the camera, solid to the sun. */}
+      {pieces.map((p, i) => (
+        <mesh
+          key={`c${i}`}
+          geometry={geo.box}
+          material={mats.shadowCaster}
+          {...pieceTransform(wall, p)}
+          castShadow
+          raycast={noRaycast}
+        />
+      ))}
       {grabbable && (
         <>
           {/* Invisible grab strip from the inner face outward, so a thumb does
@@ -197,28 +277,79 @@ function WallBox({
   )
 }
 
+/**
+ * The lid nobody sees: the cut-away view has no ceiling, but the sun must
+ * not know that, or it would pour in over the wall tops and every window
+ * would stop mattering. Shadow-only, like the wall twins.
+ */
+function CeilingCaster() {
+  const { mats } = useKit()
+  const room = useBuilder((s) => s.scene.room)
+  const geometry = useDisposable(
+    useMemo(() => {
+      const poly = footprint(room)
+      const shape = new THREE.Shape()
+      poly.forEach((p, i) => (i === 0 ? shape.moveTo(p.x, -p.z) : shape.lineTo(p.x, -p.z)))
+      shape.closePath()
+      return new THREE.ShapeGeometry(shape)
+    }, [room])
+  )
+  // Grown a wall thickness all round so no light leaks at the outer corners.
+  const grow = (Math.max(room.width, room.depth) + WALL_T * 4) / Math.max(room.width, room.depth)
+  return (
+    <mesh
+      geometry={geometry}
+      material={mats.shadowCaster}
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[(room.width / 2) * (1 - grow), room.height + 0.02, (room.depth / 2) * (1 - grow)]}
+      scale={[grow, grow, 1]}
+      castShadow
+      raycast={noRaycast}
+    />
+  )
+}
+
+/** The house's shadow on the lawn: a shadow-only plane over the ground. */
+function GroundShadow() {
+  const { geo, mats } = useKit()
+  const room = useBuilder((s) => s.scene.room)
+  const span = Math.max(room.width, room.depth) * 4 + 8
+  return (
+    <mesh
+      geometry={geo.plane}
+      material={mats.groundShadow}
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[room.width / 2, -0.004, room.depth / 2]}
+      scale={[span, span, 1]}
+      receiveShadow
+      raycast={noRaycast}
+    />
+  )
+}
+
 export function RoomShell({ walls }: { walls: Wall[] }) {
-  const meshes = useRef(new Map<WallId, THREE.Mesh>())
-  const register = useCallback((id: WallId, mesh: THREE.Mesh | null) => {
-    if (mesh) meshes.current.set(id, mesh)
+  const meshes = useRef(new Map<WallId, THREE.Object3D>())
+  const register = useCallback((id: WallId, group: THREE.Object3D | null) => {
+    if (group) meshes.current.set(id, group)
     else meshes.current.delete(id)
   }, [])
 
   // One pass for every wall, only on frames that are drawn anyway (the canvas
   // renders on demand). Positive dot = the camera stands outside this wall
   // looking in, so it would occlude the room: hide it, and the far walls keep
-  // the space readable.
+  // the space readable. Visibility goes on every piece too, so hit tests that
+  // check `object.visible` see a hidden wall as hidden.
   useFrame(({ camera }) => {
     for (const wall of walls) {
-      const mesh = meshes.current.get(wall.id)
-      if (!mesh) continue
-      if (wall.interior) {
-        mesh.visible = true
-        continue
+      const group = meshes.current.get(wall.id)
+      if (!group) continue
+      let shown = true
+      if (!wall.interior) {
+        const outside =
+          (camera.position.x - wall.mid.x) * wall.nx + (camera.position.z - wall.mid.z) * wall.nz
+        shown = outside < 0.05
       }
-      const outside =
-        (camera.position.x - wall.mid.x) * wall.nx + (camera.position.z - wall.mid.z) * wall.nz
-      mesh.visible = outside < 0.05
+      if (group.visible !== shown) group.traverse((o) => void (o.visible = shown))
     }
   })
 
@@ -229,6 +360,8 @@ export function RoomShell({ walls }: { walls: Wall[] }) {
       {walls.map((wall) => (
         <WallBox key={wall.id} wall={wall} register={register} />
       ))}
+      <CeilingCaster />
+      <GroundShadow />
     </group>
   )
 }

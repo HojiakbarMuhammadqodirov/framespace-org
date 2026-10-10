@@ -12,10 +12,20 @@ import { GeoCache } from '../furniture/geometry'
 import {
   createFurnitureMats,
   disposeFurnitureMats,
-  wood,
   type FurnitureMats,
 } from '../furniture/materials'
 import { disposeMaterialDeep } from '../materials/maps'
+import { ROOM_STYLES } from '../HeroRoom'
+import { STYLE_FINISH, type FinishStyle } from '../environment/catalog'
+import {
+  applySurface,
+  createGlassMaterial,
+  createShadowCasterMaterial,
+  createSurfaceMaterial,
+  loadSurface,
+  peekSurface,
+  surfaceOf,
+} from '../environment/surfaces'
 
 /**
  * The scene cannot read a CSS custom property, so it resolves them once at
@@ -70,28 +80,39 @@ export function createBuilderGeometries(tier: QualityTier) {
 
 export type BuilderGeo = ReturnType<typeof createBuilderGeometries>
 
-export function createBuilderMaterials() {
+/**
+ * The shell materials. Floor, walls, frames and the door start plain in the
+ * room's palette and put on real surfaces (Poly Haven, CC0) once those have
+ * downloaded — see `dressBuilderShell`. The palette is the project's style
+ * when it has one, so a Japandi project's room is a Japandi room.
+ */
+export function createBuilderMaterials(finish: FinishStyle = 'minimal') {
   const std = (color: string, roughness = 0.9, metalness = 0) =>
     new THREE.MeshStandardMaterial({ color, roughness, metalness })
 
   const accent = cssColor('--accent', '#c6552f')
   const err = cssColor('--err', '#9e3a2b')
   const paper = cssColor('--paper', '#f6f1e9')
-  const sand = cssColor('--sand-200', '#e4d9cb')
-  const clay500 = cssColor('--clay-500', '#6b4a35')
-  const clay900 = cssColor('--clay-900', '#2a1d16')
+  const palette = ROOM_STYLES[finish].colors
 
-  // Pale oak boards; the floor plate's UVs are in metres, so the figure
-  // repeats every ~1.4 m like real planks.
-  const floor = wood(sand, 'high', [0.7, 0.7])
-  floor.roughness = 0.66
+  // Paper-white for the default room, as before; a style's own wall otherwise.
+  const wallColor = finish === 'minimal' ? paper : palette.wall
+
+  const groundShadow = new THREE.ShadowMaterial({ color: '#1d2416', opacity: 0.34 })
+  groundShadow.depthWrite = false
 
   return {
-    floor,
-    wall: std(paper, 0.99),
-    trim: std(clay500, 0.72),
+    // Reflections of the sky are dimmed: indoors the boards mirror the room.
+    floor: createSurfaceMaterial({ color: palette.floor, roughness: 0.6, envMapIntensity: 0.6 }),
+    wall: createSurfaceMaterial({ color: wallColor, roughness: 0.93, normalScale: 0.6 }),
+    /** Window frames, stools, casings: oak in the style's wood tone. */
+    trim: createSurfaceMaterial({ color: palette.wood, roughness: 0.62, normalScale: 0.5 }),
     metal: std('#8e8579', 0.4, 0.3),
-    glass: new THREE.MeshBasicMaterial({ color: cssColor('--white', '#ffffff') }),
+    glass: createGlassMaterial(),
+    /** Stand-ins that only exist for the sun: hidden walls, the missing ceiling. */
+    shadowCaster: createShadowCasterMaterial(),
+    /** The house's shadow on the lawn outside. */
+    groundShadow,
     lampGlow: new THREE.MeshBasicMaterial({ color: '#ffd3a0' }),
     /** Selection outline. Basic, so it stays legible under any lighting preset. */
     select: new THREE.LineBasicMaterial({ color: accent }),
@@ -99,7 +120,8 @@ export function createBuilderMaterials() {
     handle: std(accent, 0.45),
     socket: std(paper, 0.7),
     radiator: std(cssColor('--bg-raised', '#ffffff'), 0.55, 0.15),
-    door: std(clay900, 0.8),
+    /** Door leaf: oak veneer, a shade deeper than the frames. */
+    door: createSurfaceMaterial({ color: new THREE.Color(palette.wood).multiplyScalar(0.82).getStyle(), roughness: 0.6, normalScale: 0.4 }),
   }
 }
 
@@ -162,4 +184,33 @@ export function disposeKit(kit: BuilderKit) {
   disposeMaterials(kit.mats)
   kit.fgeo.dispose()
   disposeFurnitureMats(kit.fmats)
+}
+
+/* ------------------------------------------------------------ real surfaces */
+
+const floorSize = (tier: QualityTier) => (tier === 'high' ? 2048 : 1024)
+
+/** Starts (or joins) the downloads a builder room's shell needs. */
+export function loadBuilderFinish(finish: FinishStyle, tier: QualityTier) {
+  return Promise.all([
+    loadSurface(STYLE_FINISH[finish].floor, floorSize(tier)),
+    loadSurface('plaster', 1024),
+    loadSurface('veneer-oak', 1024),
+  ])
+}
+
+/** Puts every surface that has already arrived on the shell. Idempotent. */
+export function dressBuilderShell(mats: BuilderMats, finish: FinishStyle, tier: QualityTier, anisotropy: number) {
+  const spec = STYLE_FINISH[finish]
+  const floor = peekSurface(spec.floor, floorSize(tier))
+  if (floor && surfaceOf(mats.floor) !== floor.id) {
+    applySurface(mats.floor, floor, { sheen: spec.floorSheen, anisotropy })
+  }
+  const plaster = peekSurface('plaster', 1024)
+  if (plaster && !surfaceOf(mats.wall)) applySurface(mats.wall, plaster, { anisotropy: 4 })
+  const veneer = peekSurface('veneer-oak', 1024)
+  if (veneer) {
+    if (!surfaceOf(mats.trim)) applySurface(mats.trim, veneer, { anisotropy: 4, scale: 0.5 })
+    if (!surfaceOf(mats.door)) applySurface(mats.door, veneer, { anisotropy: 4, sheen: 1.1 })
+  }
 }

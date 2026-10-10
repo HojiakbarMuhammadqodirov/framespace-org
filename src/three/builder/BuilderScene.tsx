@@ -7,7 +7,8 @@ import { DimensionLine } from '@/ui/DimensionLine'
 import { buildWalls, findWall, snap } from '@/features/room-builder/geometry'
 import { findCollisions, useBuilder } from '@/features/room-builder/store'
 import { QUALITY } from '@/features/room-builder/quality'
-import type { LightingPreset, Vec2 } from '@/features/room-builder/types'
+import type { LightingPreset, Vec2, Wall } from '@/features/room-builder/types'
+import { useProjects } from '@/store/projects'
 import { CameraRig } from './CameraRig'
 import { Fixtures } from './Fixtures'
 import { Furniture } from './Furniture'
@@ -16,11 +17,15 @@ import { GeoCache } from '../furniture/geometry'
 import { disposeFurnitureMats } from '../furniture/materials'
 import { FurnitureGeoContext } from '../furniture/models'
 import { SoftEnvironment, ToneMapping } from '../effects/Studio'
+import { OutdoorEnvironment } from '../environment/OutdoorEnvironment'
+import { skyRotationFor, toFinishStyle, type FinishStyle, type SkyId } from '../environment/catalog'
 import {
   KitContext,
   createBuilderFurnitureMats,
   createBuilderGeometries,
   createBuilderMaterials,
+  dressBuilderShell,
+  loadBuilderFinish,
   disposeGeometries,
   disposeMaterials,
   useKit,
@@ -43,31 +48,54 @@ import {
 /* ------------------------------------------------------------------ light */
 
 interface LightRig {
-  /** Direction the sun comes FROM, in room-relative units. */
-  dir: [number, number, number]
+  /** Which photographed sky stands outside. */
+  sky: SkyId
+  /** Sun height above the horizon, degrees. */
+  elevation: number
+  /**
+   * Where the sun stands relative to the main window's outward normal,
+   * degrees. The sun is aimed through a window on purpose: a patch of
+   * sunlight on the boards is what makes a room read as real.
+   */
+  azimuthOffset: number
   color: string
   intensity: number
   ambient: number
   ambientColor: string
-  /** Image-based light strength (the baked Lightformer environment). */
+  /** Image-based light strength (the sky's HDR). */
   env: number
+  /** Brightness of the visible sky and lawn. */
+  backdrop: number
 }
 
 const LIGHT_RIGS: Record<LightingPreset, LightRig> = {
-  morning: { dir: [-1.1, 0.75, 0.35], color: '#ffe6c2', intensity: 1.15, ambient: 0.3, ambientColor: '#f6f1e9', env: 0.5 },
-  afternoon: { dir: [0.6, 1.5, 0.9], color: '#fff6e6', intensity: 1.5, ambient: 0.34, ambientColor: '#ffffff', env: 0.6 },
-  evening: { dir: [1.25, 0.42, -0.5], color: '#e9a06a', intensity: 0.85, ambient: 0.18, ambientColor: '#d8c6b4', env: 0.26 },
-  lamps: { dir: [0.2, 1.1, 0.4], color: '#cbb9a4', intensity: 0.1, ambient: 0.12, ambientColor: '#9e8d7e', env: 0.07 },
+  morning: { sky: 'day', elevation: 30, azimuthOffset: -38, color: '#ffe8cc', intensity: 6.5, ambient: 1.35, ambientColor: '#f4efe8', env: 0.5, backdrop: 0.96 },
+  afternoon: { sky: 'day', elevation: 42, azimuthOffset: 24, color: '#fff2df', intensity: 7.5, ambient: 1.5, ambientColor: '#fbf3e8', env: 0.55, backdrop: 1 },
+  evening: { sky: 'golden', elevation: 13, azimuthOffset: 34, color: '#ffb36e', intensity: 6, ambient: 0.95, ambientColor: '#f1dcc4', env: 0.4, backdrop: 1.1 },
+  lamps: { sky: 'dusk', elevation: 3, azimuthOffset: 0, color: '#9fb2d4', intensity: 0.05, ambient: 0.4, ambientColor: '#b9a690', env: 0.2, backdrop: 0.75 },
 }
 
-function SceneLights() {
+/** Default sun bearing (radians, atan2(z, x)) when the room has no window. */
+const NO_WINDOW_AZIMUTH = Math.atan2(0.9, 0.6)
+
+/** Bearing of the main window's outward normal, or null. */
+function useWindowAzimuth(walls: Wall[]): number | null {
+  const fixtures = useBuilder((s) => s.scene.fixtures)
+  return useMemo(() => {
+    const win = fixtures.find((f) => f.kind === 'window')
+    const wall = win && findWall(walls, win.wall)
+    return wall ? Math.atan2(wall.nz, wall.nx) : null
+  }, [fixtures, walls])
+}
+
+function SceneLights({ walls }: { walls: Wall[] }) {
   const preset = useBuilder((s) => s.scene.lighting)
   const room = useBuilder((s) => s.scene.room)
   const tier = useBuilder((s) => s.quality)
   const q = QUALITY[tier]
 
   const sun = useRef<THREE.DirectionalLight>(null)
-  const ambient = useRef<THREE.AmbientLight>(null)
+  const ambient = useRef<THREE.HemisphereLight>(null)
   const invalidate = useThree((state) => state.invalidate)
   const scene = useThree((state) => state.scene)
   const current = useRef({
@@ -92,18 +120,24 @@ function SceneLights() {
   }, [centre])
 
   const rig = LIGHT_RIGS[preset]
+  // Without a shadow map the sun would light every wall and the whole floor at
+  // patch strength, as if the room had no walls. Low tier keeps it a hint.
+  const sunIntensity = q.shadows ? rig.intensity : rig.intensity * 0.22
+  const windowAzimuth = useWindowAzimuth(walls)
+  const azimuth =
+    windowAzimuth === null ? NO_WINDOW_AZIMUTH : windowAzimuth + THREE.MathUtils.degToRad(rig.azimuthOffset)
   // Resolved once per preset — never a fresh Color per frame.
   const rigColor = useMemo(() => new THREE.Color(rig.color), [rig])
   const rigAmbient = useMemo(() => new THREE.Color(rig.ambientColor), [rig])
-  const wanted = useMemo(
-    () =>
-      new THREE.Vector3(
-        centre.x + rig.dir[0] * span,
-        rig.dir[1] * span + room.height,
-        centre.z + rig.dir[2] * span
-      ),
-    [centre, rig, span, room.height]
-  )
+  const distance = span * 2 + 8
+  const wanted = useMemo(() => {
+    const el = THREE.MathUtils.degToRad(rig.elevation)
+    return new THREE.Vector3(
+      centre.x + Math.cos(el) * Math.cos(azimuth) * distance,
+      Math.sin(el) * distance,
+      centre.z + Math.cos(el) * Math.sin(azimuth) * distance
+    )
+  }, [centre, rig, azimuth, distance])
 
   // The light travels to its new position rather than teleporting, so the
   // shadows visibly swing round the room when the preset changes.
@@ -121,7 +155,7 @@ function SceneLights() {
     }
     c.color.lerp(rigColor, k)
     c.ambientColor.lerp(rigAmbient, k)
-    c.intensity += (rig.intensity - c.intensity) * k
+    c.intensity += (sunIntensity - c.intensity) * k
     c.ambient += (rig.ambient - c.ambient) * k
     c.env += (rig.env - c.env) * k
     scene.environmentIntensity = c.env
@@ -129,7 +163,7 @@ function SceneLights() {
     // Keep asking for frames until the light has arrived.
     const settling =
       c.pos.distanceToSquared(wanted) > 1e-6 ||
-      Math.abs(c.intensity - rig.intensity) > 1e-3 ||
+      Math.abs(c.intensity - sunIntensity) > 1e-3 ||
       Math.abs(c.ambient - rig.ambient) > 1e-3 ||
       Math.abs(c.env - rig.env) > 1e-3 ||
       !colorsClose(c.color, rigColor) ||
@@ -147,11 +181,27 @@ function SceneLights() {
     }
   })
 
-  const half = span * 0.9 + 2
+  // Shadow box: the room plus the stretch of lawn its shadow falls on.
+  const half = span * 0.9 + 2.5
 
   return (
     <>
-      <ambientLight ref={ambient} intensity={LIGHT_RIGS.afternoon.ambient} />
+      {/* The world outside: lights the room and fills the windows. The room
+          stands on the photographed lawn (ground projection), turned so the
+          photo's sun is where our sun is. Low-tier devices get the small
+          files; the studio light stands in until the sky has loaded. */}
+      <OutdoorEnvironment
+        sky={rig.sky}
+        tier={tier}
+        rotation={skyRotationFor(rig.sky, azimuth)}
+        background="ground"
+        ground={{ height: 1.7, radius: 60, center: [centre.x, centre.z] }}
+        backgroundIntensity={rig.backdrop}
+        fallback={<SoftEnvironment mood="daylight" intensity={0.5} resolution={tier === 'low' ? 32 : 64} />}
+      />
+      {/* Bounce: a room's shade is lit by its own warm floor and walls, not by
+          the blue sky the HDR knows about. */}
+      <hemisphereLight ref={ambient} intensity={LIGHT_RIGS.afternoon.ambient} groundColor="#c4a584" />
       <primitive object={target} />
       <directionalLight
         ref={sun}
@@ -161,9 +211,9 @@ function SceneLights() {
         shadow-mapSize={[q.shadowMap, q.shadowMap]}
         shadow-bias={-0.0003}
         shadow-normalBias={0.025}
-        shadow-radius={3}
+        shadow-radius={2}
         shadow-camera-near={0.5}
-        shadow-camera-far={span * 4 + 12}
+        shadow-camera-far={distance + span * 2 + 4}
         shadow-camera-left={-half}
         shadow-camera-right={half}
         shadow-camera-top={half}
@@ -173,7 +223,7 @@ function SceneLights() {
       {q.detail && (
         <directionalLight
           position={[centre.x - span, span * 0.7, centre.z + span]}
-          intensity={0.16}
+          intensity={0.12}
           color="#e4d9cb"
         />
       )}
@@ -329,11 +379,34 @@ export function BuilderScene() {
   useEffect(() => useBuilder.subscribe(() => invalidate()), [invalidate])
 
   const geo = useMemo(() => createBuilderGeometries(tier), [tier])
+  // The room wears its project's style (Japandi boards for a Japandi
+  // project); a room with no project keeps the paper-and-pale-oak default.
+  const roomId = useBuilder((s) => s.roomId)
+  const projectStyle = useProjects((s) => s.projects.find((p) => p.id === roomId)?.style)
+  const finish: FinishStyle = projectStyle ? toFinishStyle(projectStyle) : 'minimal'
   // Tokens are re-resolved when the theme flips, so the room follows the page.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const mats = useMemo(() => createBuilderMaterials(), [theme])
+  const mats = useMemo(() => createBuilderMaterials(finish), [theme, finish])
   useEffect(() => () => disposeGeometries(geo), [geo])
   useEffect(() => () => disposeMaterials(mats), [mats])
+
+  // Real surfaces arrive after first paint and are put on in one go.
+  const gl = useThree((state) => state.gl)
+  useEffect(() => {
+    let live = true
+    loadBuilderFinish(finish, tier)
+      .then(() => {
+        if (!live) return
+        dressBuilderShell(mats, finish, tier, Math.min(8, gl.capabilities.getMaxAnisotropy()))
+        invalidate()
+      })
+      .catch(() => {
+        // Offline: the plain palette materials are a complete room on their own.
+      })
+    return () => {
+      live = false
+    }
+  }, [mats, finish, tier, gl, invalidate])
 
   const fgeo = useMemo(() => new GeoCache(tier), [tier])
   const fmats = useMemo(() => createBuilderFurnitureMats(tier), [tier])
@@ -351,11 +424,11 @@ export function BuilderScene() {
   return (
     <KitContext.Provider value={kit}>
       <FurnitureGeoContext.Provider value={fgeo}>
-      <ToneMapping mode="neutral" exposure={1} />
-      <SoftEnvironment mood="daylight" intensity={0.5} resolution={tier === 'low' ? 32 : 64} />
+      <ToneMapping mode="neutral" exposure={1.35} />
+
       <CameraRig />
       <Registrar />
-      <SceneLights />
+      <SceneLights walls={wallList} />
       <RoomShell walls={wallList} />
       <Fixtures walls={wallList} />
       <Furniture collisions={collisions} />

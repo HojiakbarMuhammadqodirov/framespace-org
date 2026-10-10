@@ -110,6 +110,31 @@ the native pointer replaced.
   around the viewport is beige, and a sooty fade there reads as a hole punched
   in the frame rather than distance.
 - Low-tier devices drop shadow-map size and mote count and skip the shaft.
+- **A real world outside** (`src/three/environment/`). Photographed skies
+  from Poly Haven (CC0, see `public/env/CREDITS.md`) light every material and
+  fill the windows: the hero looks out on a garden; the builder's cut-away
+  room stands on the photographed lawn (ground-projected) with real holes in
+  its walls. Each sky ships as a tonemapped WebP backdrop (sun kept) plus a
+  small HDR for light with the sun clamped out — the shadow-casting
+  directional light *is* the sun, aimed through the main window and with the
+  photo rotated to match, so sunlight lands as a patch on the boards with the
+  glazing bars in it. Builder presets map to skies: morning/afternoon → day,
+  evening → golden hour, lamps → dusk.
+- Walls the cut-away hides, and the ceiling it never draws, still cast
+  (shadow-only stand-ins), so light only enters through windows. Interior
+  fill is a warm hemisphere "bounce", not the blue sky.
+- **Real surfaces** (`public/textures/CREDITS.md`, CC0): oak, light oak,
+  walnut and herringbone floors, stucco walls/ceiling, oak veneer frames and
+  doors. Colour maps are tint-ready, so the palette still decides the colour;
+  UVs are world metres in the shader, so planks are plank-sized everywhere.
+  Each style keeps its palette and gets its own floor figure. The builder
+  follows its project's style when it has one.
+- Glass is reflection-only (Fresnel added over the view, no transmission
+  pass). Tone mapping stays Neutral after an AgX/ACES comparison.
+- Everything outside/surface-related loads lazily after first paint; until
+  it lands the procedural studio light and plain palette materials stand in.
+  Low tier gets 2k backdrops, 512 HDRs and 1k floors, and a dimmer sun when
+  it has no shadow map. The furniture is untouched by this.
 - **The room palettes stay warm and true.** Minimal, Japandi, Modern Uzbek and
   Classic are product *content* — someone choosing Japandi has to see Japandi.
 

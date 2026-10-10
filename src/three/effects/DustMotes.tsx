@@ -11,6 +11,8 @@ export interface DustMotesProps {
   size: [number, number, number]
   count?: number
   color?: string
+  /** Sprite opacity (additive). Keep low: real dust only shows in the beam. */
+  opacity?: number
 }
 
 /**
@@ -21,7 +23,7 @@ export interface DustMotesProps {
  * Frozen in place (not hidden) under `prefers-reduced-motion`: the motes
  * still read as dust in the light, they just stop moving.
  */
-export function DustMotes({ center, size, count = 200, color = '#FFE1B0' }: DustMotesProps) {
+export function DustMotes({ center, size, count = 200, color = '#FFE1B0', opacity = 0.3 }: DustMotesProps) {
   const reduced = useSceneReducedMotion()
   const pointsRef = useRef<THREE.Points>(null)
   const speeds = useMemo(() => {
@@ -46,7 +48,7 @@ export function DustMotes({ center, size, count = 200, color = '#FFE1B0' }: Dust
       map: map ?? undefined,
       color,
       transparent: true,
-      opacity: 0.3,
+      opacity,
       depthWrite: false,
       sizeAttenuation: true,
       blending: THREE.AdditiveBlending,
