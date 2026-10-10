@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { Matrix4, type Object3D } from 'three'
 
 import { palette } from '@/design/theme'
+import { RealOrProcedural } from '@/three/furniture/real'
 import type { LiveModel } from './models'
 
 /**
@@ -19,9 +20,10 @@ import type { LiveModel } from './models'
  * 3. Matrices applied directly (`matrixAutoUpdate = false`), never decomposed
  *    into position/rotation props, so no React update is in the hot path.
  *
- * The geometry is placeholder. `models.ts` says exactly where the real assets
- * plug in; the footprints here are the real dimensions, so a swap changes what
- * you see and not where it sits.
+ * Pieces with a real model (`models.ts`) load it scaled into the item's real
+ * dimensions; the placeholder geometry — same footprint — shows while it
+ * loads, if it fails, and for items without one, so a swap changes what you
+ * see and not where it sits.
  */
 
 interface Placement {
@@ -180,7 +182,14 @@ export function ArScene({ session, model, onPlacedCount, onTracking }: ArScenePr
             else anchorRefs.current.delete(placement.id)
           }}
         >
-          <Placeholder model={placement.model} />
+          <RealOrProcedural
+            id={placement.model.real}
+            fallback={<Placeholder model={placement.model} />}
+            w={placement.model.size[0]}
+            h={placement.model.size[1]}
+            d={placement.model.size[2]}
+            castShadow={false}
+          />
         </group>
       ))}
     </>

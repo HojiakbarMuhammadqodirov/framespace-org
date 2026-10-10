@@ -16,6 +16,7 @@ import { SceneCanvas, useSceneReducedMotion } from './Canvas'
 import { detectSceneTier, type SceneTier } from './effects/quality'
 import { SoftEnvironment, ToneMapping } from './effects/Studio'
 import { GeoCache } from './furniture/geometry'
+import { PRODUCT_REAL_MODEL, REAL_MODELS, RealOrProcedural, type RealModelId } from './furniture/real'
 import { disposeMaterialDeep } from './materials/maps'
 import {
   createFurnitureMats,
@@ -49,31 +50,29 @@ import {
  * One piece of furniture on a turntable — the viewer behind every catalog card
  * and the full-bleed stage on `/catalog/:id`.
  *
- * ## Why there is no glTF here
+ * ## Real models first, procedural behind them
  *
- * This repo ships no `.glb` files and none are downloaded, so every product is
- * modelled procedurally from the shared furniture library in
- * `./furniture` — rounded, puffed cushions with analytic normals, tapered
- * splayed legs, lathed ceramics, fluted doors, phyllotaxis foliage — the same
- * vocabulary the hero room and the room builder use. Geometries are cached
- * per viewer and disposed with it, colours are lerped rather than rebuilt (a
- * new material means a shader recompile and a visible hitch), and the light
- * is a baked Lightformer environment plus one key — no HDR download.
+ * Most product kinds now load a real, freely licensed, photo-textured glTF
+ * model (`./furniture/real.tsx`, `PRODUCT_REAL_MODEL`; credits in
+ * `public/models/furniture/CREDITS.md`). The pipeline that produced them is
+ * `scripts/furniture/build-models.mjs`:
  *
- * ## Where a real model drops in
+ *   glTF 2.0  ->  dedup / prune / weld  ->  WebP textures (1024, sofa 2048)
+ *             ->  Meshopt geometry (EXT_meshopt_compression)  ->  .glb
  *
- * `src` is already part of the props and is deliberately unused. When the
- * asset pipeline exists, `ProductScene` gains a branch: `src` present ->
- * `useGLTF(src)`, `src` null -> the primitive stand-in below, with the same
- * frame/`spin`/`interactive` behaviour either side. The intended pipeline is
+ * decoded with drei's `useGLTF` and three-stdlib's inline Meshopt decoder —
+ * no decoder download, no CDN. The parsed glTF is cached per URL and shared by
+ * every card on the page; each viewer clones the scene graph only.
  *
- *   glTF 2.0  ->  Draco (geometry)  ->  Meshopt (vertex/index streams)
- *             ->  KTX2 / Basis UASTC (textures)  ->  .glb
- *
- * decoded with drei's `useGLTF` plus `DRACOLoader`, `MeshoptDecoder` and
- * `KTX2Loader` wired through a shared loading manager, so the decoders are
- * fetched once for the whole grid rather than once per card. Until then the
- * primitives are honest placeholders, not fake screenshots.
+ * The procedural piece from the shared furniture library in `./furniture` —
+ * rounded, puffed cushions with analytic normals, tapered splayed legs,
+ * lathed ceramics, fluted doors, phyllotaxis foliage — is the Suspense and
+ * error fallback, and is still the whole model for kinds with no good free
+ * model yet (bed, floor lamp, rug, curtain, wall panel, paint set). Its
+ * colours are lerped rather than rebuilt (a new material means a shader
+ * recompile and a visible hitch); upholstered real models follow the same
+ * cross-fade by copying the upholstery colour. The light is a baked
+ * Lightformer environment plus one key — no HDR download.
  */
 
 /* ------------------------------------------------------------------ public */
@@ -326,8 +325,7 @@ const MARGIN = 1.12
  * horizontal half-extent is half the footprint diagonal, the widest the piece
  * ever gets while spinning. Elevation comes from the per-model FRAMES pitch.
  */
-function fitDistance(model: ProductModelKey, aspect: number, pitch: number): number {
-  const b = BOUNDS[model]
+function fitDistance(b: { w: number; d: number; y0: number; y1: number }, aspect: number, pitch: number): number {
   const rH = Math.hypot(b.w, b.d) / 2
   const hh = Math.max(0.01, (b.y1 - b.y0) / 2)
   const vHalf = THREE.MathUtils.degToRad(FOV / 2)
@@ -340,6 +338,26 @@ function fitDistance(model: ProductModelKey, aspect: number, pitch: number): num
   const dH = near + (ex * MARGIN) / Math.tan(hHalf)
   const dV = near * Math.cos(pitch) + (ey * MARGIN) / Math.tan(vHalf)
   return Math.max(dH, dV)
+}
+
+/**
+ * Real-model target box per key (metres): the same dimensions the procedural
+ * stand-in is built at, so the swap does not move the camera or the shadow.
+ * `y1` replaces the bounds' top where the stand-in carried decor (a vase on
+ * the sideboard, a centrepiece on the table) that the photographed model has
+ * not — the frame then hugs what is really there.
+ */
+const REAL_BOX: Partial<Record<ProductModelKey, { w: number; d: number; h: number; top?: number; y1: number }>> = {
+  sofa: { w: 2.2, d: 0.94, h: 0.84, y1: 0.86 },
+  // Uniform 'footprint' fit: the chair keeps its own proportions (~0.9 m tall).
+  armchair: { w: 0.84, d: 0.86, h: 0.8, y1: 0.92 },
+  diningTable: { w: 1.9, d: 0.92, h: 0.75, y1: 0.77 },
+  coffeeTable: { w: 1.1, d: 0.6, h: 0.42, y1: 0.44 },
+  shelf: { w: 1.1, d: 0.34, h: 1.92, y1: 1.92 },
+  sideboard: { w: 1.66, d: 0.46, h: 0.82, y1: 0.84 },
+  planter: { w: 0.6, d: 0.6, h: 1.24, y1: 1.26 },
+  pendant: { w: 0.5, d: 0.5, h: 1.24, top: 2.24, y1: 2.24 },
+  divider: { w: 1.9, d: 0.75, h: 1.82, y1: 1.84 },
 }
 
 /** Footprint of the soft floor shadow (x, z), metres. */
@@ -520,6 +538,11 @@ export interface ProductSceneProps {
   spinSpeed?: number
   /** Extra yaw applied once, so a grid of cards is not a row of clones. */
   offset?: number
+  /**
+   * Which real model to load. Omitted: the default for `model`
+   * (`PRODUCT_REAL_MODEL`). `null`: always the procedural stand-in.
+   */
+  variant?: RealModelId | null
 }
 
 interface Kit {
@@ -546,11 +569,14 @@ export function ProductScene({
   shadows = false,
   spinSpeed = 0.34,
   offset = 0,
+  variant,
 }: ProductSceneProps) {
   const model: ProductModelKey = modelProp in MODELS ? modelProp : 'armchair'
   const frame = FRAMES[model]
   const Model = MODELS[model]
   const tier = useMemo(detectSceneTier, [])
+  const realId = variant === undefined ? (PRODUCT_REAL_MODEL[model] ?? null) : variant
+  const realBox = realId ? REAL_BOX[model] : undefined
 
   const geo = useMemo(() => new GeoCache(tier), [tier])
   const latest = useRef(palette)
@@ -571,11 +597,11 @@ export function ProductScene({
   // moving both would cancel out.
   const AZIMUTH = 0.38
   const aspect = useThree((s) => (s.size.height > 0 ? s.size.width / s.size.height : 1))
-  const bounds = BOUNDS[model]
+  const bounds = realBox ? { ...BOUNDS[model], y1: realBox.y1 } : BOUNDS[model]
   // Pitch is the per-model look-down angle; the pivot is the bounds' centre.
   const pitch = Math.atan2(frame.height - frame.target, frame.radius)
   const centreY = (bounds.y0 + bounds.y1) / 2
-  const dist = fitDistance(model, aspect, pitch)
+  const dist = fitDistance(bounds, aspect, pitch)
   const camera: V3 = [
     Math.sin(AZIMUTH) * Math.cos(pitch) * dist,
     centreY + Math.sin(pitch) * dist,
@@ -593,7 +619,21 @@ export function ProductScene({
 
         <Turntable spin={spin} speed={spinSpeed}>
           <group rotation={[0, offset, 0]}>
-            <Model m={mats} />
+            {realId && realBox ? (
+              <RealOrProcedural
+                id={realId}
+                fallback={<Model m={mats} />}
+                w={realBox.w}
+                d={realBox.d}
+                h={realBox.h}
+                top={realBox.top}
+                // Upholstery follows the palette's cross-fade live.
+                tint={REAL_MODELS[realId].tintable ? (mats.upholstery as THREE.MeshStandardMaterial).color : null}
+                castShadow={shadows}
+              />
+            ) : (
+              <Model m={mats} />
+            )}
           </group>
         </Turntable>
 
@@ -666,12 +706,6 @@ function ElevationFallback({ label }: { label?: string }) {
 }
 
 export interface ProductViewerProps extends ProductSceneProps {
-  /**
-   * URL of a `.glb`. Reserved — there are no model files in this repo, so the
-   * primitive stand-in renders whatever this is set to. See the file header
-   * for the Draco / Meshopt / KTX2 pipeline this hangs off.
-   */
-  src?: string | null
   className?: string
   style?: CSSProperties
   /** Accessible name for the plate: an image when still, a 3D control when interactive. */
@@ -690,7 +724,6 @@ export function ProductViewer({
   fallback,
   paused,
   rootMargin = '160px',
-  src: _src,
   ...scene
 }: ProductViewerProps) {
   return (
