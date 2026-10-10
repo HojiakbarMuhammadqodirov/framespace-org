@@ -195,6 +195,10 @@ export function Footer() {
         <div className="fs-foot__bar">
           <span>{t('landing.footer.rights')}</span>
           <span>{t('landing.footer.madeIn')}</span>
+          {/* Required by CC BY 4.0 for sofa-glam.glb; the file lists every model and texture. */}
+          <a className="fs-navlink" href="/models/furniture/CREDITS.md" target="_blank" rel="noopener">
+            {t('landing.footer.credits')}
+          </a>
         </div>
       </div>
     </footer>
