@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 
 import { Cursor } from '@/ui/Cursor'
+import { ServerWakeNotice } from '@/ui/ServerWakeNotice'
 import { PublicLayout } from '@/layouts/PublicLayout'
 import { ImmersiveLayout } from '@/layouts/ImmersiveLayout'
 import { Placeholder } from '@/pages/Placeholder'
@@ -185,6 +186,7 @@ export function Router() {
   return (
     <BrowserRouter>
       <Cursor />
+      <ServerWakeNotice />
       <AppRoutes />
     </BrowserRouter>
   )

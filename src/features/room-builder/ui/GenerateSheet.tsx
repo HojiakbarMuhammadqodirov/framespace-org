@@ -7,6 +7,7 @@ import { STYLES } from '@/lib/styles.js'
 import { cacheRecord, newProjectId, persistRecord } from '@/features/capture/store'
 import { ROOM_TYPES, type CaptureRecord, type RoomTypeId } from '@/features/capture/types'
 import { useSession } from '@/store/session'
+import { useRenderAllowance } from '@/lib/useRenderAllowance'
 
 import { RenderSceneError, renderScene } from '../api'
 import { localeOf, squareMetres, useMoneyFormat } from '../format'
@@ -304,8 +305,8 @@ export function GenerateSheet() {
   const scene = useBuilder((s) => s.scene)
   const roomId = useBuilder((s) => s.roomId)
   const fmt = useMoneyFormat()
-  const left = useSession((s) => s.generationsLeft())
   const signedIn = useSession((s) => Boolean(s.user))
+  const { left, quota, needsSignIn, dailyExhausted, resetTime } = useRenderAllowance()
 
   const [phase, setPhase] = useState<Phase>({ kind: 'setup' })
   const [style, setStyle] = useState<string>('')
@@ -404,7 +405,8 @@ export function GenerateSheet() {
   async function generate() {
     if (running) return
     if (useSession.getState().generationsLeft() <= 0) {
-      setPhase({ kind: 'error', error: new RenderSceneError('quota', 'No generations left.') })
+      const kind = needsSignIn ? 'signin' : dailyExhausted ? 'dailyQuota' : 'quota'
+      setPhase({ kind: 'error', error: new RenderSceneError(kind, 'No generations left.') })
       return
     }
 
@@ -434,7 +436,9 @@ export function GenerateSheet() {
       stageTimers.forEach((id) => window.clearTimeout(id))
       setPhase({ kind: 'running', stage: 'save', startedAt })
 
-      if (!result.demoMode) useSession.getState().consumeGeneration()
+      // The server's count wins when it keeps one.
+      if (result.quota) useSession.getState().setQuota(result.quota)
+      else if (!result.demoMode) useSession.getState().consumeGeneration()
 
       const record: CaptureRecord = {
         id: newProjectId(),
@@ -469,6 +473,10 @@ export function GenerateSheet() {
       if (error instanceof RenderSceneError && error.kind === 'aborted') {
         setPhase({ kind: 'setup' })
         return
+      }
+      if (error instanceof RenderSceneError) {
+        if (error.kind === 'dailyQuota' && error.details?.quota) useSession.getState().setQuota(error.details.quota)
+        if (error.kind === 'signin') void useSession.getState().refresh()
       }
       setPhase({ kind: 'error', error: error instanceof Error ? error : new Error(String(error)) })
     }
@@ -607,13 +615,27 @@ export function GenerateSheet() {
                 <p className="rb-gen__note">{t('builder.generate.emptyRoom')}</p>
               )}
               {overBudget && <p className="rb-gen__note">{t('builder.generate.overBudget')}</p>}
+              {needsSignIn && <p className="rb-gen__note">{t('limits.signinBody')}</p>}
+              {dailyExhausted && quota && (
+                <p className="rb-gen__note" role="status">
+                  {t('limits.exhaustedBody', { limit: quota.limit, time: resetTime })}
+                </p>
+              )}
 
               <div className="rb-gen__foot">
                 <span className="rb-gen__credits">
-                  {t('builder.generate.credits', { count: left })}
+                  {quota
+                    ? `${t('limits.left', { remaining: quota.remaining, limit: quota.limit })} · ${t('limits.resets', { time: resetTime })}`
+                    : needsSignIn
+                      ? t('limits.signinTitle')
+                      : t('builder.generate.credits', { count: left })}
                 </span>
-                {noCredits ? (
-                  <Cta onClick={() => navigate(signedIn ? '/pricing' : '/signup')}>
+                {noCredits && dailyExhausted ? null : noCredits ? (
+                  <Cta
+                    onClick={() =>
+                      navigate(signedIn ? '/pricing' : `/signup?next=${encodeURIComponent(location.pathname)}`)
+                    }
+                  >
                     {signedIn ? t('builder.generate.upgrade') : t('builder.generate.signup')}
                   </Cta>
                 ) : (

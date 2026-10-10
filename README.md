@@ -49,6 +49,83 @@ Model IDs are overridable via `CLAUDE_MODEL` (default `claude-sonnet-5-5`) and
 `GEMINI_IMAGE_MODEL` (default `gemini-3-pro-image-preview`). All server settings
 are listed in `.env.example`.
 
+**Cost controls.** As soon as either key is set, renders can cost money, so:
+
+- `/api/render` and `/api/render-scene` need a signed-in user (401 `unauthenticated`);
+- each user gets `RENDER_DAILY_QUOTA` renders per UTC day, default 5
+  (429 `quota_exceeded`, with `details.resetsAt` and `Retry-After`); a render
+  that ends in an error gives its unit back;
+- all users together get `GLOBAL_DAILY_RENDER_CAP` per UTC day, default 100
+  (503 `capacity`) — the ceiling on your daily bill;
+- at most `GEMINI_MAX_IMAGES_PER_REQUEST` images (default 4) and
+  `CLAUDE_MAX_OUTPUT_TOKENS` (default 16000) per call;
+- the per-IP `RENDER_RATE_LIMIT` still applies in front of all of it.
+
+Counters live in the same storage as accounts, so a restart does not reset
+them. With no keys (demo mode) none of this applies and the app stays
+clickable without an account; `RENDER_LIMITS_IN_DEMO=true` turns it on anyway
+for testing. The app shows "N of 5 generations left today" where renders start.
+
+## Deploying for free
+
+Everything below is on free tiers that need no credit card. The frontend is a
+static build on **Vercel**; the API runs on **Render**; accounts live in
+**Neon** (or Supabase) Postgres. Vercel forwards `/api/*` to Render, so the
+browser only ever talks to your Vercel domain and the session cookie is
+first-party (Secure, SameSite=Lax, httpOnly).
+
+**1. Database — Neon** (recommended)
+
+1. Sign up at <https://neon.tech> with GitHub or Google (no card).
+2. Create a project; region **AWS Europe Central (Frankfurt)**.
+3. On the dashboard, *Connect* → copy the connection string
+   (`postgresql://…neon.tech/neondb?sslmode=require…`). That is your `DATABASE_URL`.
+
+Tables are created by the server at boot; there is nothing to run by hand.
+
+*Supabase instead:* sign up at <https://supabase.com>, create a project, then
+*Connect* → *Session pooler* → copy the URI (put your database password in it).
+Also set `DATABASE_SSL=no-verify` — Supabase signs its certificates with its own
+CA. (Free Supabase projects pause after a week without traffic; Neon's free
+compute just sleeps and wakes on the next query.)
+
+**2. API — Render**
+
+1. Sign up at <https://render.com> with GitHub (no card for free services).
+2. *New* → *Blueprint* → connect the GitHub repo
+   `HojiakbarMuhammadqodirov/framespace-org`. Render reads `render.yaml`.
+3. It asks for the secret values: paste `DATABASE_URL`; paste
+   `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`, or leave them empty to run the demo.
+4. *Apply*. When the deploy is green, open
+   `https://<service>.onrender.com/api/health` — you should see
+   `"ok":true` and `"storage":"postgres"`.
+
+Note the service URL. If the name `framespace-api` was free it is
+`https://framespace-api.onrender.com`; otherwise Render adds a suffix.
+
+**3. Point Vercel at it**
+
+1. Open `vercel.json` and make the first rewrite's `destination` your Render
+   URL (keep the `/api/:path*` ending). Vercel rewrites cannot read
+   environment variables, so this URL lives in the file.
+2. Commit and push; Vercel redeploys. The second rewrite sends every other
+   path to `index.html`, so deep links like `/app/capture` load the app.
+3. Check `https://<your-vercel-domain>/api/health` returns the same JSON.
+
+**What to expect on free tiers**
+
+- Render's free service sleeps after ~15 minutes without traffic. The next
+  visitor waits 30–60 s; the app shows "Waking up the server…" and retries
+  on its own. Requests are never re-sent once the server has received them.
+- Render's disk is wiped on every deploy — that is why step 1 matters. Without
+  `DATABASE_URL` the API falls back to JSON files and loses accounts on deploy.
+- Logs: Render → your service → *Logs*. Errors are one JSON object per line;
+  filter for `server_error`, `provider_error` or `client_error` (browser crashes
+  reported by the app itself).
+- Very long renders pass through Vercel's proxy. If real-model renders start
+  failing with a gateway timeout, lower the work per request
+  (`GEMINI_MAX_IMAGES_PER_REQUEST`) or move the frontend to the same host as the API.
+
 ## API
 
 All responses are JSON. Errors are always `{ error, code?, fields? }` — never an
@@ -56,15 +133,21 @@ HTML page or a stack trace. Unknown `/api/*` routes return 404 JSON.
 
 | Route | Body | Success |
 | --- | --- | --- |
-| `GET /api/health` | — | `{ ok, demoMode, providers, models, uptimeS }` |
+| `GET /api/health` | — | `{ ok, demoMode, providers, models, storage, renders: { requireAuth, dailyQuota }, uptimeS }` |
 | `GET /api/angles` | — | `{ angles, requiredAngleIds }` |
 | `POST /api/auth/signup` | `{ name, email, password }` | 201 `{ user }` + `fs_session` cookie |
 | `POST /api/auth/login` | `{ email, password }` | 200 `{ user }` + cookie |
 | `POST /api/auth/logout` | — | 204, cookie cleared |
-| `GET /api/auth/me` | — | 200 `{ user }` (`user: null` for guests) |
-| `POST /api/render` | `{ photos:[{angleId,data,mediaType}], style, budget?, notes?, locale? }` | `{ demoMode, style, locale, brief, renders, failures, elapsedMs }` |
+| `GET /api/auth/me` | — | 200 `{ user, quota, renderAccess }` (`user: null` for guests) |
+| `GET /api/quota` | — | `{ quota, renderAccess }` |
+| `POST /api/render` | `{ photos:[{angleId,data,mediaType}], style, budget?, notes?, locale? }` | `{ demoMode, style, locale, brief, renders, failures, elapsedMs, quota? }` |
 | `POST /api/render-scene` | the 3D builder's `ScenePayload` (`src/features/room-builder/payload.ts`, includes `locale`) | same shape as `/api/render`, plus `warnings` |
 | `POST /api/contact` | `{ name?, email, message }` | `{ ok: true }` |
+| `POST /api/client-errors` | `{ kind, message, stack?, source?, line?, column?, path, release? }` (≤ 16 KB) | 204 |
+
+`quota` is `{ limit, used, remaining, resetsAt }` for a signed-in user while
+limits are enforced, otherwise `null`; `renderAccess` is
+`{ requireAuth, dailyQuota }`.
 
 **Language.** Both render routes take `locale` (`uz` | `ru` | `en`); without it
 the server uses the first supported language in `Accept-Language`, then `uz`.
@@ -77,11 +160,15 @@ configured, from `server/i18n.js` in demo mode. Image prompts stay in English.
 `user` is `{ id, name, email, createdAt }`. Error codes: `validation` (400, with
 a `fields` map), `invalid_json` (400), `invalid_credentials` (401),
 `unauthenticated` (401), `email_taken` (409), `payload_too_large` (413),
-`rate_limited` (429, with `Retry-After`), `provider_error` (502/422),
-`provider_busy` (503), `provider_timeout` / `timeout` (504), `not_found` (404).
+`rate_limited` (429, with `Retry-After`), `quota_exceeded` (429, with
+`details.resetsAt`), `provider_error` (502/422), `provider_busy` (503),
+`capacity` (503), `provider_timeout` / `timeout` (504), `not_found` (404).
 
-**Accounts.** Stored in `server/data/auth.json` (override with `DATA_DIR`;
-git-ignored), written atomically. Passwords are hashed with scrypt and a
+**Accounts.** Stored in Postgres when `DATABASE_URL` is set (tables `fs_users`,
+`fs_sessions`, `fs_daily_counters`, `fs_contact_messages`, `fs_client_errors`,
+created at boot), otherwise in `server/data/*.json` (override with `DATA_DIR`;
+git-ignored), written atomically. Both backends sit behind one interface in
+`server/lib/storage.js`. Passwords are hashed with scrypt and a
 per-user salt; sessions are random 256-bit tokens kept in an httpOnly,
 SameSite=Lax cookie (Secure in production) and stored server-side only as a
 SHA-256 hash, valid for 30 days. Sign-up and sign-in are rate-limited per IP and
@@ -91,7 +178,19 @@ per email.
 a per-IP limit on `/api/render*` (`RENDER_RATE_LIMIT` per 10 min), request
 deadlines, security headers, one log line per API request, retries with
 exponential backoff on provider 429/5xx, and graceful shutdown on SIGINT/SIGTERM.
+The 30 MB render body is only read after the sign-in and quota checks pass.
+Errors are logged as one JSON object per line (`server_error`,
+`provider_error`, `client_error`, …), never with request bodies.
 CORS is off unless `CORS_ORIGINS` is set (dev uses the Vite proxy).
+
+**Error tracking.** `src/lib/errorReporter.ts` catches `window` errors,
+unhandled rejections and React render errors (via the root's
+`onUncaughtError` / `onCaughtError`), strips query strings, emails and
+key-like strings, and posts them to `/api/client-errors` (production builds
+only, at most 10 per page load). The server re-sanitises, logs and keeps the
+newest `CLIENT_ERRORS_KEEP`. To add Sentry later, follow the comment at the top
+of that file — set `VITE_SENTRY_DSN` and register a sink; nothing is installed
+until you do.
 
 **3D builder renders.** `/api/render-scene` keeps the user's furniture and
 catalogue prices as the costed list. With a Claude key, Claude writes the
@@ -147,7 +246,8 @@ photogrammetry, and a true walk-through would need a different capture method.
 ```
 server/
   index.js      Express app: routes, validation, budget recomputation, lifecycle
-  auth.js       accounts + sessions (scrypt, httpOnly cookie, JSON store)
+  auth.js       accounts + sessions (scrypt, httpOnly cookie)
+  quota.js      render cost controls: sign-in, daily quota, global daily cap
   scene.js      3D builder scene validation and plain-language description
   sceneDemo.js  scene brief without keys (renders via roomSvg.js)
   roomSvg.js    demo renderer: one-point-perspective SVG room illustrations
@@ -157,8 +257,10 @@ server/
   gemini.js     image-to-image restyling and text-to-image scene views
   angles.js     the capture plan (shared with the frontend)
   demo.js       key-free fallback so the app is always clickable
-  lib/          http helpers (errors, rate limit, headers, logging),
-                retry/backoff, atomic JSON store
+  lib/          http helpers (errors, rate limit, headers, JSON logging),
+                retry/backoff, atomic JSON store, storage.js (JSON | Postgres)
+render.yaml     Render.com Blueprint for the API (free plan)
+vercel.json     static frontend: /api/* proxied to Render, SPA fallback
 src/
   App.jsx       screen state machine
   components/   TabBar (4 tabs + the camera circle), header, icons
@@ -177,10 +279,13 @@ angle is a one-line change that both halves pick up.
 - The Archive lives in `localStorage`, which means it is per-device and capped
   by the browser's storage quota. Renders are large; the app evicts the oldest
   project rather than failing the save.
-- Accounts, sessions and contact messages live in JSON files under
-  `server/data/` — fine for one process; move to a database before scaling out.
-  Rate limits are in-memory per process for the same reason.
-- Contact messages append to `server/data/messages.json`. Point it at email or
-  a ticketing tool before you take real traffic.
+- Without `DATABASE_URL`, accounts, sessions, quotas and contact messages live
+  in JSON files under `server/data/` — fine for one process on a persistent
+  disk. Per-IP rate limits are in-memory per process either way, so run one
+  instance (the free tier does).
+- Contact messages are stored (`fs_contact_messages` or `messages.json`) but
+  nobody is notified. Point them at email or a ticketing tool before you take
+  real traffic. Account deletion requests arrive the same way and are handled
+  by hand — there is no self-serve delete endpoint yet.
 - News content is authored in `src/screens/News.jsx`. Swap the array for a feed
   when you have one — the screen only cares about the shape.

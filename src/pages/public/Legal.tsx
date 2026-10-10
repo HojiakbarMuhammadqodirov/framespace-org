@@ -63,7 +63,8 @@ export function Legal({ doc }: { doc: LegalDoc }) {
           <p className="fs-lead" style={{ marginTop: 'var(--s6)', maxWidth: '52ch' }}>
             {t(`legal.${doc}.lead`)}
           </p>
-          <p className="lg__updated">{t('legal.updated')}</p>
+          {/* Each document may carry its own date; the shared one is the fallback. */}
+          <p className="lg__updated">{t(`legal.${doc}.updated`, { defaultValue: t('legal.updated') })}</p>
           <div className="lg__switch">
             {(['terms', 'privacy'] as const).map((d) => (
               <Link key={d} to={`/legal/${d}`} className="fs-chip" data-selected={d === doc} aria-current={d === doc ? 'page' : undefined}>

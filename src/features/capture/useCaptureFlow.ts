@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useSession } from '@/store/session'
+import type { RenderQuota } from '@/store/session'
 
 import { ANGLE_ORDER, REQUIRED_ANGLE_IDS, RECOMMENDED_ANGLE_IDS, prepareCapture, requestRender } from './contract'
 import type { PreparedImage } from './contract'
@@ -37,6 +38,12 @@ import type {
 /** Map a thrown error onto a designed error screen. */
 function classify(err: unknown): FlowErrorKind {
   if ((err as Error)?.name === 'TimeoutError') return 'timeout'
+  // The server's codes first (src/lib/api.js attaches them).
+  const code = (err as { code?: string })?.code
+  if (code === 'unauthenticated') return 'signin'
+  if (code === 'quota_exceeded') return 'daily-quota'
+  if (code === 'capacity') return 'capacity'
+  if (code === 'gateway') return 'offline'
   if ((err as { status?: number })?.status === 429) return 'quota'
   const text = ((err as Error)?.message || '').toLowerCase()
   if (text === 'timeout') return 'timeout'
@@ -675,8 +682,11 @@ export function useCaptureFlow(
     if (missingRequired.length) return
     // The plan screen already swaps its button for sign-up / pricing at zero;
     // this is the same rule for the retry button on the failure screen.
-    if (useSession.getState().generationsLeft() <= 0) {
-      setError({ kind: 'quota' })
+    const session = useSession.getState()
+    if (session.generationsLeft() <= 0) {
+      const kind: FlowErrorKind =
+        !session.user && session.renderAccess?.requireAuth ? 'signin' : session.user && session.quota ? 'daily-quota' : 'quota'
+      setError({ kind })
       setStep('failed')
       return
     }
@@ -720,8 +730,10 @@ export function useCaptureFlow(
         throw new Error(result?.failures?.[0]?.error || 'The server answered without any renders.')
       }
 
-      // Demo answers are canned; they cost the person nothing.
-      if (!result.demoMode) useSession.getState().consumeGeneration()
+      // The server's count wins when it keeps one. Otherwise: demo answers
+      // are canned and cost the person nothing.
+      if (result.quota) useSession.getState().setQuota(result.quota)
+      else if (!result.demoMode) useSession.getState().consumeGeneration()
 
       const before: Record<AngleId, string> = {}
       await Promise.all(
@@ -773,7 +785,14 @@ export function useCaptureFlow(
         setStep('plan')
         return
       }
-      setError({ kind: classify(err), detail: (err as Error)?.message || '' })
+      const kind = classify(err)
+      // Keep the session in step with what the server just said.
+      const details = (err as { details?: { quota?: RenderQuota } })?.details
+      if (kind === 'daily-quota' && details?.quota) useSession.getState().setQuota(details.quota)
+      if (kind === 'signin') void useSession.getState().refresh()
+      // The designed copy says it all for these; the raw server text would repeat it.
+      const quiet = kind === 'signin' || kind === 'daily-quota' || kind === 'capacity'
+      setError({ kind, detail: quiet ? '' : (err as Error)?.message || '' })
       setStep('failed')
     }
   }, [budget, camera, heading.orientation.source, missingRequired.length, notes, onComplete, online, options.featured, roomName, roomType, style])

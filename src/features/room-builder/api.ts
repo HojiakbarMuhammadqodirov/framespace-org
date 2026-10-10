@@ -6,6 +6,8 @@
  * the result page can show a builder generation exactly like a captured one.
  */
 import type { RenderResponse } from '@/features/capture/types'
+import { ensureAwake, isGatewayFailure, markAwake } from '@/lib/wake'
+import type { RenderQuota } from '@/store/session'
 
 import type { ScenePayload } from './payload'
 
@@ -13,16 +15,37 @@ export const RENDER_SCENE_URL = '/api/render-scene'
 /** Generations take up to a couple of minutes on a real model. */
 export const RENDER_TIMEOUT_MS = 120_000
 
-export type RenderSceneErrorKind = 'offline' | 'timeout' | 'aborted' | 'server' | 'quota' | 'bad-response'
+export type RenderSceneErrorKind =
+  | 'offline'
+  | 'timeout'
+  | 'aborted'
+  | 'server'
+  | 'quota'
+  | 'bad-response'
+  /** 401 `unauthenticated` — renders cost money, so they need an account. */
+  | 'signin'
+  /** 429 `quota_exceeded` — today's allowance is used up. */
+  | 'dailyQuota'
+  /** 503 `capacity` — the service-wide daily cap is reached. */
+  | 'capacity'
 
 export class RenderSceneError extends Error {
   kind: RenderSceneErrorKind
   status?: number
-  constructor(kind: RenderSceneErrorKind, message: string, status?: number) {
+  /** The server's `details` (for `dailyQuota`: `{ quota, resetsAt }`). */
+  details?: { quota?: RenderQuota; resetsAt?: string }
+  constructor(kind: RenderSceneErrorKind, message: string, status?: number, details?: RenderSceneError['details']) {
     super(message)
     this.kind = kind
     this.status = status
+    this.details = details
   }
+}
+
+const KIND_BY_CODE: Record<string, RenderSceneErrorKind> = {
+  unauthenticated: 'signin',
+  quota_exceeded: 'dailyQuota',
+  capacity: 'capacity',
 }
 
 export async function renderScene(
@@ -45,9 +68,13 @@ export async function renderScene(
   try {
     let res: Response
     try {
+      // Wake a sleeping free-tier server before sending (POSTs never retry).
+      await ensureAwake()
+      if (controller.signal.aborted) throw new Error('aborted')
       res = await fetch(RENDER_SCENE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(payload),
         signal: controller.signal,
       })
@@ -59,6 +86,9 @@ export async function renderScene(
         err instanceof Error ? err.message : 'Network request failed.'
       )
     }
+
+    if (isGatewayFailure(res)) throw new RenderSceneError('offline', `HTTP ${res.status}`, res.status)
+    markAwake()
 
     let data: unknown = null
     try {
@@ -72,7 +102,10 @@ export async function renderScene(
         (data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string'
           ? (data as { error: string }).error
           : '') || `HTTP ${res.status}`
-      throw new RenderSceneError(res.status === 429 || res.status === 402 ? 'quota' : 'server', message, res.status)
+      const body = (data && typeof data === 'object' ? data : {}) as { code?: string; details?: RenderSceneError['details'] }
+      const kind =
+        (body.code && KIND_BY_CODE[body.code]) || (res.status === 429 || res.status === 402 ? 'quota' : 'server')
+      throw new RenderSceneError(kind, message, res.status, body.details)
     }
 
     if (!data || typeof data !== 'object') {

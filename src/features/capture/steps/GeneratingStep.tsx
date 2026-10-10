@@ -11,6 +11,7 @@
  * wide frame, four angle thumbnails, a furniture column and a palette row.
  */
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 
 import { getHealth } from '../contract'
@@ -320,6 +321,9 @@ const FAILURE_KEY: Record<string, string> = {
   'camera-missing': 'cameraMissing',
   'shot-failed': 'shotFailed',
   timeout: 'timeout',
+  signin: 'signin',
+  'daily-quota': 'dailyQuota',
+  capacity: 'capacity',
 }
 
 /** Copy for kinds newer than the translation files. */
@@ -336,7 +340,11 @@ const FAILURE_FALLBACK: Record<string, { title: string; body: string }> = {
 
 export function FailedStep({ flow }: { flow: CaptureFlow }) {
   const { t } = useTranslation()
-  const key = FAILURE_KEY[flow.error?.kind || 'render-failed'] || 'renderFailed'
+  const navigate = useNavigate()
+  const kind = flow.error?.kind || 'render-failed'
+  const key = FAILURE_KEY[kind] || 'renderFailed'
+  // Retrying cannot help until tomorrow; signing in is the only way forward.
+  const canRetry = kind !== 'daily-quota' && kind !== 'capacity' && kind !== 'signin'
 
   return (
     <div className="cap-gen">
@@ -370,9 +378,20 @@ export function FailedStep({ flow }: { flow: CaptureFlow }) {
         )}
 
         <div className="cap-gen__actions" style={{ width: '100%' }}>
-          <ArrowButton onClick={() => void flow.generate()} disabled={!flow.online}>
-            {t('common.retry')}
-          </ArrowButton>
+          {kind === 'signin' && (
+            <>
+              {/* The draft keeps the photos across the sign-in round trip. */}
+              <ArrowButton onClick={() => navigate('/signup?next=/app/capture')}>{t('nav.signup')}</ArrowButton>
+              <ArrowButton quiet onClick={() => navigate('/login?next=/app/capture')}>
+                {t('limits.login')}
+              </ArrowButton>
+            </>
+          )}
+          {canRetry && (
+            <ArrowButton onClick={() => void flow.generate()} disabled={!flow.online}>
+              {t('common.retry')}
+            </ArrowButton>
+          )}
           <ArrowButton quiet glyph="back" onClick={() => flow.setStep('review')}>
             {t('capture.errors.backToShots')}
           </ArrowButton>

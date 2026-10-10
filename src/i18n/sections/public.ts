@@ -440,30 +440,43 @@ const bundle: Bundle = {
       "privacy": {
         "title": "Maxfiylik siyosati",
         "lead": "Qanday maʼlumot yigʻamiz, nima uchun va uni qanday himoya qilamiz.",
+        "updated": "Oxirgi yangilanish: 2026-yil 11-oktabr",
         "sections": [
           {
             "h": "Yigʻiladigan maʼlumotlar",
-            "p": "Ism, elektron pochta, yuklangan xona suratlari va loyiha sozlamalari. Toʻlov maʼlumotlarini toʻlov provayderi qayta ishlaydi — ular bizda saqlanmaydi."
+            "p": "Hisob ochganingizda ismingiz va elektron pochtangiz, parolingizning hash koʻrinishi, kirish sessiyalaringiz (brauzer nomi bilan), bugun nechta dizayn yaratganingiz hisobi va aloqa formasi orqali yuborgan xabarlaringiz. Ilova xatoga uchrasa, bizga texnik xato hisoboti keladi (xato matni va sahifa manzili — surat yoki shaxsiy maʼlumotsiz). Hozircha toʻlov qabul qilmaymiz, shuning uchun karta maʼlumotlari bizda yoʻq."
+          },
+          {
+            "h": "Xona suratlari",
+            "p": "Yaratish tugmasini bosganingizda olingan yoki tanlangan suratlar qurilmangizdan serverimizga yuboriladi. Server ularni saqlamaydi: suratlar faqat dizayn tayyorlanayotgan paytda xotirada turadi, keyin oʻchib ketadi. Tayyor dizayn va rasmlar qurilmangizga qaytadi va faqat shu brauzer xotirasida (Arxivda), “oldin/keyin” koʻrinishi uchun suratlaringizning kichik nusxalari bilan birga saqlanadi. Suratga olish tugaguncha yoki tab yopilguncha suratlar sahifa yangilanganda yoʻqolmasligi uchun tabning vaqtinchalik xotirasida ham turadi. Brauzer maʼlumotlarini tozalash yoki Sozlamalar sahifasi ularni oʻchiradi."
+          },
+          {
+            "h": "Suratlarni kim qayta ishlaydi",
+            "p": "Xonangizni loyihalash uchun suratlaringiz, izohlaringiz va tanlangan uslub Anthropic (Claude) ga — xonani tahlil qilib, loyihani tuzadi — va Google (Gemini) ga — suratlaringizni yangi dizaynda qayta chizadi — yuboriladi. 3D konstruktor surat emas, faqat xona joylashuvining matnli tavsifini yuboradi. Ikkala kompaniya ham bu maʼlumotni oʻz API shartlari asosida qayta ishlaydi va xavfsizlik nazorati uchun maʼlum muddat saqlashi mumkin. Google shartlari tarifga qarab farq qiladi: Gemini API ning bepul tarifida Google yuborilgan maʼlumotdan oʻz mahsulotlarini yaxshilash uchun (jumladan, inson tomonidan koʻrib chiqish bilan) foydalanishi mumkin, pullik tariflarda esa yoʻq. Iltimos, odamlar, hujjatlar yoki boshqa shaxsiy narsalarni suratga olmang. Demo rejimda hech narsa bu kompaniyalarga yuborilmaydi."
           },
           {
             "h": "Nima uchun",
-            "p": "Loyihangizni tayyorlash, hisobingizni yuritish va savollaringizga javob berish uchun. Maʼlumotlaringizni sotmaymiz."
+            "p": "Dizayningizni tayyorlash, hisobingizni yuritish, xizmatni bepul limitlar ichida ushlab turish va savollaringizga javob berish uchun. Maʼlumotlaringiz va suratlaringizni sotmaymiz va reklama uchun ishlatmaymiz."
+          },
+          {
+            "h": "Qancha vaqt saqlanadi",
+            "p": "Suratlar: serverimizda umuman saqlanmaydi. Hisob maʼlumotlari: hisobni oʻchirishni soʻraguningizcha. Kirish sessiyalari: 30 kun. Kunlik generatsiya hisobi har kuni yangilanadi. Aloqa xabarlari: oʻchirishni soʻraguningizcha. Xato hisobotlari: faqat oxirgi bir necha yuztasi saqlanadi."
           },
           {
             "h": "Saqlash va himoya",
-            "p": "Parollar shifrlangan (hash) holda saqlanadi, sessiya himoyalangan httpOnly cookie orqali ishlaydi. Maʼlumotlar faqat xizmat uchun zarur muddat saqlanadi."
+            "p": "Parollar shifrlangan (hash) holda saqlanadi, sessiya himoyalangan httpOnly cookie orqali ishlaydi. Hisob maʼlumotlari hosting provayderimizning maʼlumotlar bazasida saqlanadi."
           },
           {
             "h": "Cookie fayllar",
             "p": "Faqat tizimga kirish va sozlamalarni (til, valyuta, mavzu) eslab qolish uchun zarur cookie va mahalliy xotiradan foydalanamiz."
           },
           {
-            "h": "Sizning huquqlaringiz",
-            "p": "Maʼlumotlaringizni koʻrish, tuzatish yoki oʻchirishni soʻrashingiz mumkin. Sozlamalar sahifasida mahalliy maʼlumotlarni oʻzingiz tozalay olasiz."
+            "h": "Sizning huquqlaringiz va oʻchirish",
+            "p": "Maʼlumotlaringizni koʻrish, tuzatish yoki oʻchirishni soʻrashingiz mumkin. Hisobingizni va u bilan saqlangan hamma narsani oʻchirish uchun hisobdagi pochta manzilidan aloqa formasi orqali yozing — bajarilganini tasdiqlaymiz. Qurilmangizdagi maʼlumotlarni (Arxiv, sozlamalar) Sozlamalar sahifasida oʻzingiz tozalay olasiz."
           },
           {
             "h": "Aloqa",
-            "p": "Maxfiylik boʻyicha savollar uchun hello@framespace.uz manziliga yozing."
+            "p": "Maxfiylik boʻyicha savollar uchun aloqa formasi orqali yoki hello@framespace.uz manziliga yozing."
           }
         ]
       }
@@ -603,30 +616,43 @@ const bundle: Bundle = {
       "privacy": {
         "title": "Политика конфиденциальности",
         "lead": "Какие данные мы собираем, зачем и как их защищаем.",
+        "updated": "Последнее обновление: 11 октября 2026 г.",
         "sections": [
           {
             "h": "Какие данные мы собираем",
-            "p": "Имя, почту, загруженные фото комнаты и настройки проекта. Платёжные данные обрабатывает платёжный провайдер — у нас они не хранятся."
+            "p": "При регистрации — имя и почту, хеш пароля, ваши сессии входа (с названием браузера), счётчик дизайнов, созданных за сегодня, и сообщения, отправленные через форму обратной связи. Если приложение даёт сбой, нам приходит технический отчёт об ошибке (текст ошибки и адрес страницы — без фото и личных данных). Платежей мы пока не принимаем, поэтому данных карт у нас нет."
+          },
+          {
+            "h": "Фотографии комнаты",
+            "p": "Когда вы нажимаете «Создать», снятые или выбранные фото отправляются с устройства на наш сервер. Сервер их не сохраняет: фото находятся в памяти только пока готовится дизайн, затем удаляются. Готовый дизайн и изображения возвращаются на ваше устройство и хранятся только в памяти этого браузера (в Архиве) вместе с уменьшенными копиями ваших фото для режима «до/после». Пока вы снимаете и не закрыли вкладку, фото также лежат во временном хранилище вкладки, чтобы не пропасть при перезагрузке. Очистка данных браузера или страница настроек удаляет их."
+          },
+          {
+            "h": "Кто обрабатывает фото",
+            "p": "Чтобы спроектировать комнату, ваши фото, заметки и выбранный стиль отправляются в Anthropic (Claude) — он анализирует комнату и составляет проект — и в Google (Gemini) — он перерисовывает ваши фото в новом дизайне. 3D-конструктор отправляет только текстовое описание планировки, без фото. Обе компании обрабатывают данные по своим условиям API и могут хранить их ограниченное время для контроля безопасности. Условия Google зависят от тарифа: на бесплатном тарифе Gemini API Google может использовать отправленное для улучшения своих продуктов (в том числе с проверкой людьми), на платных — нет. Пожалуйста, не снимайте людей, документы и другие личные вещи. В демо-режиме этим компаниям ничего не отправляется."
           },
           {
             "h": "Зачем",
-            "p": "Чтобы подготовить ваш проект, вести аккаунт и отвечать на вопросы. Мы не продаём ваши данные."
+            "p": "Чтобы подготовить ваш дизайн, вести аккаунт, удерживать сервис в рамках бесплатных лимитов и отвечать на вопросы. Мы не продаём ваши данные и фото и не используем их для рекламы."
+          },
+          {
+            "h": "Сколько хранятся данные",
+            "p": "Фото: на нашем сервере не хранятся вовсе. Данные аккаунта: пока вы не попросите удалить аккаунт. Сессии входа: 30 дней. Дневной счётчик генераций перезаписывается каждый день. Сообщения из формы: пока вы не попросите их удалить. Отчёты об ошибках: хранятся только последние несколько сотен."
           },
           {
             "h": "Хранение и защита",
-            "p": "Пароли хранятся в виде хеша, сессия защищена httpOnly-cookie. Данные хранятся только столько, сколько нужно для работы сервиса."
+            "p": "Пароли хранятся в виде хеша, сессия защищена httpOnly-cookie. Данные аккаунта хранятся в базе данных нашего хостинг-провайдера."
           },
           {
             "h": "Cookie",
-            "p": "Мы используем только необходимые cookie и локальное хранилище — для входа и запоминания настроек (язык, валюта, тема)."
+            "p": "Мы используем только необходимые cookie и локальное хранилище — чтобы вы оставались в аккаунте и чтобы запомнить настройки (язык, валюту, тему)."
           },
           {
-            "h": "Ваши права",
-            "p": "Вы можете запросить просмотр, исправление или удаление своих данных. Локальные данные можно очистить самостоятельно в настройках."
+            "h": "Ваши права и удаление",
+            "p": "Вы можете запросить просмотр, исправление или удаление своих данных. Чтобы удалить аккаунт и всё, что с ним связано, напишите через форму обратной связи с почты, указанной в аккаунте, — мы подтвердим удаление. Данные на устройстве (Архив, настройки) можно очистить самостоятельно на странице настроек."
           },
           {
             "h": "Контакты",
-            "p": "По вопросам конфиденциальности пишите на hello@framespace.uz."
+            "p": "По вопросам конфиденциальности пишите через форму обратной связи или на hello@framespace.uz."
           }
         ]
       }
@@ -766,30 +792,43 @@ const bundle: Bundle = {
       "privacy": {
         "title": "Privacy policy",
         "lead": "What we collect, why, and how we protect it.",
+        "updated": "Last updated: 11 October 2026",
         "sections": [
           {
             "h": "What we collect",
-            "p": "Your name, email, the room photos you upload and your project settings. Payment details are handled by the payment provider and never stored by us."
+            "p": "When you create an account: your name and email, a hash of your password, your sign-in sessions (with the browser name), a count of how many designs you generated today, and any message you send through the contact form. If the app crashes, it sends us a technical error report (the error text and the page address — no photos or personal details). We do not take payments yet, so we hold no card details."
+          },
+          {
+            "h": "Your room photos",
+            "p": "When you press Generate, the photos you took or picked are sent from your device to our server. The server never saves them: they are held in memory only while your design is being made, then discarded. The finished design and images come back to your device and are saved only in this browser’s storage (your Archive), together with small copies of your photos for the before/after view. While you are still shooting, the photos are also kept in the tab’s temporary storage so a reload does not lose them, until you finish or close the tab. Clearing your browser data, or the Settings page, removes them."
+          },
+          {
+            "h": "Who processes your photos",
+            "p": "To design your room, your photos, your notes and the style you chose are sent to Anthropic (Claude), which reads the room and plans the design, and to Google (Gemini), which redraws your photos in the new design. The 3D builder sends only a text description of your layout, never photos. Both companies process this under their own API terms and may keep it for a limited time for safety and abuse monitoring. Google’s terms differ by plan: on the free tier of the Gemini API, Google may use what is sent to improve its products, including human review; on paid plans it does not. Please don’t photograph people, documents or anything else private. In demo mode nothing is sent to either company."
           },
           {
             "h": "Why",
-            "p": "To prepare your project, run your account and answer your questions. We never sell your data."
+            "p": "To prepare your design, run your account, keep the service within its free limits and answer your questions. We never sell your data or your photos, and we don’t use them for advertising."
+          },
+          {
+            "h": "How long we keep things",
+            "p": "Photos: not kept on our server at all. Account details: until you ask us to delete the account. Sign-in sessions: 30 days. The daily generation counter is overwritten every day. Contact messages: until you ask us to delete them. Error reports: only the most recent few hundred are kept."
           },
           {
             "h": "Storage and security",
-            "p": "Passwords are stored hashed and your session lives in a secure httpOnly cookie. Data is kept only as long as the service needs it."
+            "p": "Passwords are stored hashed and your session lives in a secure httpOnly cookie. Account data is stored in our hosting provider’s database."
           },
           {
             "h": "Cookies",
             "p": "We only use essential cookies and local storage — to keep you signed in and remember your preferences (language, currency, theme)."
           },
           {
-            "h": "Your rights",
-            "p": "You can ask to see, correct or delete your data. Local data can be cleared yourself from the Settings page."
+            "h": "Your rights and deletion",
+            "p": "You can ask to see, correct or delete your data. To delete your account and everything stored with it, send a message through the contact form from the email address on the account, and we will confirm once it is done. Data on your device (Archive, settings) you can clear yourself from the Settings page."
           },
           {
             "h": "Contact",
-            "p": "For privacy questions, write to hello@framespace.uz."
+            "p": "For privacy questions, use the contact form or write to hello@framespace.uz."
           }
         ]
       }

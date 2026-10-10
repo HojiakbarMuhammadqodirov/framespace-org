@@ -15,6 +15,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+import { apiGet, ensureAwake, isGatewayFailure } from '@/lib/wake'
+
 export type Plan = 'free' | 'studio'
 
 export type SessionUser = {
@@ -27,6 +29,23 @@ export type SessionUser = {
 
 /** Credits for one billing period. Local counters until billing is real. */
 export type Credits = { used: number; total: number }
+
+/**
+ * The server's daily render allowance for the signed-in user — the real
+ * limit whenever renders can cost money (`renderAccess.requireAuth`). It wins
+ * over the local `credits` counters above.
+ */
+export type RenderQuota = { limit: number; used: number; remaining: number; resetsAt: string }
+
+/** Whether the server wants a signed-in user before it renders. */
+export type RenderAccess = { requireAuth: boolean; dailyQuota: number }
+
+/** A quota whose day has rolled over is full again, without asking. */
+export function liveQuota(quota: RenderQuota | null, now = Date.now()): RenderQuota | null {
+  if (!quota) return null
+  if (Date.parse(quota.resetsAt) <= now) return { ...quota, used: 0, remaining: quota.limit }
+  return quota
+}
 
 export const PLAN_CREDITS: Record<Plan, number> = {
   free: 3,
@@ -83,25 +102,34 @@ function mapCode(status: number, code?: string): AuthErrorCode {
   return 'unknown'
 }
 
-async function authRequest(
-  path: string,
-  method: 'GET' | 'POST',
-  body?: unknown
-): Promise<{ user?: ApiUser } | null> {
+type AuthPayload = {
+  user?: ApiUser
+  quota?: RenderQuota | null
+  renderAccess?: RenderAccess
+}
+
+async function authRequest(path: string, method: 'GET' | 'POST', body?: unknown): Promise<AuthPayload | null> {
   let res: Response
+  const init: RequestInit = {
+    method,
+    credentials: 'include',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  }
   try {
-    res = await fetch(`/api/auth/${path}`, {
-      method,
-      credentials: 'include',
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    })
+    // GETs may be retried through a server wake-up; POSTs wait for the
+    // server to be up and then go out exactly once.
+    if (method === 'GET') res = await apiGet(`/api/auth/${path}`, init)
+    else {
+      await ensureAwake()
+      res = await fetch(`/api/auth/${path}`, init)
+    }
   } catch {
     throw new AuthFailure('network')
   }
+  if (isGatewayFailure(res)) throw new AuthFailure('network')
   if (res.status === 204) return null
-  const payload = (await res.json().catch(() => ({}))) as {
-    user?: ApiUser
+  const payload = (await res.json().catch(() => ({}))) as AuthPayload & {
     error?: string
     code?: string
   }
@@ -133,6 +161,12 @@ type SessionState = {
   pending: boolean
   /** Whether `/api/auth/me` has answered since the page loaded. */
   status: SessionStatus
+  /** Today's server-side render allowance (null for guests / demo mode). */
+  quota: RenderQuota | null
+  /** Learned from `/api/auth/me`; null until the server has answered. */
+  renderAccess: RenderAccess | null
+  /** Store the allowance a render response or a 429 reported. */
+  setQuota: (quota: RenderQuota | null) => void
 
   /** Asks the server who is signed in. Safe to call repeatedly. */
   refresh: () => Promise<SessionUser | null>
@@ -158,6 +192,10 @@ export const useSession = create<SessionState>()(
       guestGenerationsUsed: 0,
       pending: false,
       status: 'unknown',
+      quota: null,
+      renderAccess: null,
+
+      setQuota: (quota) => set({ quota }),
 
       refresh: () => {
         if (inflightRefresh) return inflightRefresh
@@ -167,7 +205,12 @@ export const useSession = create<SessionState>()(
             const payload = await authRequest('me', 'GET')
             const api = payload?.user
             const user = api ? toUser(api, get().user?.plan) : null
-            set({ user, status: 'ready' })
+            set({
+              user,
+              status: 'ready',
+              quota: payload?.quota ?? null,
+              renderAccess: payload?.renderAccess ?? get().renderAccess,
+            })
             return user
           } catch (err) {
             // 401 → definitely signed out. A network failure keeps the cached
@@ -195,6 +238,8 @@ export const useSession = create<SessionState>()(
           // A new account starts with its plan's allowance. Anything the
           // visitor spent as a guest is forgiven on sign-up.
           set({ user, status: 'ready', credits: { used: 0, total: PLAN_CREDITS[user.plan] } })
+          // Pick up the server's daily allowance for the new account.
+          void get().refresh()
           return user
         } finally {
           set({ pending: false })
@@ -218,6 +263,7 @@ export const useSession = create<SessionState>()(
               total: PLAN_CREDITS[user.plan],
             },
           }))
+          void get().refresh()
           return user
         } finally {
           set({ pending: false })
@@ -227,7 +273,7 @@ export const useSession = create<SessionState>()(
       logOut: async () => {
         // Clear locally first so the UI responds instantly; the cookie is
         // dropped by the server in the background.
-        set({ user: null })
+        set({ user: null, quota: null })
         try {
           await authRequest('logout', 'POST')
         } catch {
@@ -248,7 +294,12 @@ export const useSession = create<SessionState>()(
       },
 
       generationsLeft: () => {
-        const { user, credits, guestGenerationsUsed } = get()
+        const { user, credits, guestGenerationsUsed, renderAccess } = get()
+        // When renders cost money the server decides: a signed-in user has
+        // today's allowance, a guest has nothing until they sign in.
+        const quota = liveQuota(get().quota)
+        if (user && quota) return quota.remaining
+        if (!user && renderAccess?.requireAuth) return 0
         if (user) return Math.max(0, credits.total - credits.used)
         return Math.max(0, GUEST_FREE_GENERATIONS - guestGenerationsUsed)
       },

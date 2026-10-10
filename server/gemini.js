@@ -11,6 +11,12 @@ export const GEMINI_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-imag
 const MODEL = GEMINI_MODEL
 const ATTEMPT_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS ?? 120_000)
 const RETRIES = Number(process.env.GEMINI_MAX_RETRIES ?? 2)
+/**
+ * Hard ceiling on images generated for one request — every image is billed.
+ * Jobs past it are not sent; they come back in `failures` (and the 3D
+ * builder shows its own drawing for those views).
+ */
+export const MAX_IMAGES_PER_REQUEST = Math.max(1, Math.floor(Number(process.env.GEMINI_MAX_IMAGES_PER_REQUEST) || 4))
 
 let client = null
 function getClient() {
@@ -103,7 +109,12 @@ export function renderSceneView({ prompt, angleId = 'view' }) {
   return generateImage([{ text: `${prompt}\n\n${SCENE_GUARD}` }], `gemini-scene:${angleId}`)
 }
 
-async function settleAll(jobs, run) {
+async function settleAll(allJobs, run) {
+  const jobs = allJobs.slice(0, MAX_IMAGES_PER_REQUEST)
+  const skipped = allJobs.slice(MAX_IMAGES_PER_REQUEST).map((job) => ({
+    angleId: job.angleId,
+    error: 'Skipped: this request reached its image limit.',
+  }))
   const settled = await Promise.allSettled(
     jobs.map(async (job) => {
       const image = await run(job)
@@ -124,7 +135,7 @@ async function settleAll(jobs, run) {
       failures.push({ angleId: jobs[i].angleId, error: publicMessage(result.reason) })
     }
   })
-  return { renders, failures }
+  return { renders, failures: failures.concat(skipped) }
 }
 
 /** Provider errors can carry raw JSON payloads; keep what reaches users short. */

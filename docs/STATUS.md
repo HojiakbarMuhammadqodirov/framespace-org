@@ -177,3 +177,11 @@ works offline.
 **Where does this deploy?** `/api/render` holds a connection ~30 s and accepts a
 30 MB body; Vercel's serverless limits break both, and `/api/contact` writes to
 the local filesystem. A persistent Node host runs the current code unchanged.
+
+**Answer (free tiers):** frontend stays static on Vercel; the API runs on
+Render's free web service (`render.yaml`); accounts, sessions, render quotas,
+contact messages and client error reports go to Neon/Supabase Postgres when
+`DATABASE_URL` is set. Vercel rewrites `/api/*` to Render (`vercel.json`), so
+cookies stay first-party. Renders need an account, are capped per user per day
+and globally per day whenever an AI key is set. Step-by-step in README →
+*Deploying for free*.

@@ -7,6 +7,8 @@
  * contract ever changes, this file is the single place the client has to move.
  */
 
+import type { RenderQuota } from '@/store/session'
+
 export type AngleId = string
 
 /** Where the heading number came from. `none` = the device told us nothing. */
@@ -162,6 +164,8 @@ export type RenderResponse = {
   elapsedMs?: number
   /** Non-fatal problems the server worked around (render-scene). */
   warnings?: Array<{ stage?: string; error?: string }>
+  /** Today's allowance after this render, when the server enforces one. */
+  quota?: RenderQuota
 }
 
 /* -------------------------------------------------------------- storage */
@@ -207,6 +211,12 @@ export type FlowErrorKind =
   | 'shot-failed'
   /** `/api/render` did not answer inside the client's 120 s window. */
   | 'timeout'
+  /** 401 `unauthenticated`: renders cost money, so they need an account. */
+  | 'signin'
+  /** 429 `quota_exceeded`: today's per-user allowance is used up. */
+  | 'daily-quota'
+  /** 503 `capacity`: the service-wide daily cap is reached. */
+  | 'capacity'
 
 export type FlowError = { kind: FlowErrorKind; detail?: string }
 

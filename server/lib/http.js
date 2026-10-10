@@ -6,6 +6,34 @@ import crypto from 'node:crypto'
 
 export const isProd = process.env.NODE_ENV === 'production'
 
+/**
+ * One JSON object per line, so a log drain (Render's log view, Better Stack,
+ * `grep`) can filter on fields instead of parsing prose. Errors carry their
+ * stack, trimmed; nothing from request bodies is ever logged.
+ *
+ * @param {'error'|'warn'|'info'} level
+ * @param {string} type  e.g. 'server_error', 'client_error', 'provider_error'
+ * @param {Record<string, unknown>} [fields]
+ */
+export function logEvent(level, type, fields = {}) {
+  const line = { ts: new Date().toISOString(), level, type }
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined) continue
+    if (v instanceof Error) {
+      line[k] = { name: v.name, message: v.message, status: v.status, stack: String(v.stack || '').split('\n').slice(0, 12).join('\n') }
+    } else line[k] = v
+  }
+  let out
+  try {
+    out = JSON.stringify(line)
+  } catch {
+    out = JSON.stringify({ ts: line.ts, level, type, note: 'unserialisable fields' })
+  }
+  if (level === 'error') console.error(out)
+  else if (level === 'warn') console.warn(out)
+  else console.log(out)
+}
+
 export class HttpError extends Error {
   /**
    * @param {number} status
@@ -138,6 +166,12 @@ export function errorHandler(err, req, res, next) {
   if (status >= 400 && status < 500) {
     return res.status(status).json({ error: err.expose ? err.message : 'Bad request.' })
   }
-  console.error(`[error] ${req.id || ''} ${req.method} ${req.originalUrl}`, err)
+  logEvent('error', 'server_error', {
+    reqId: req.id,
+    method: req.method,
+    path: req.originalUrl.split('?')[0],
+    status: 500,
+    error: err instanceof Error ? err : new Error(String(err)),
+  })
   res.status(500).json({ error: 'Something went wrong on our side. Try again.', code: 'internal' })
 }

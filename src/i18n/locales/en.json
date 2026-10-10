@@ -357,5 +357,9 @@
     "step": "step",
     "legal": "Legal",
     "newProject": "Start a new project"
+  },
+  "wake": {
+    "waking": "Waking up the server — our free server naps when idle. This can take up to a minute…",
+    "down": "The server is not responding right now."
   }
 }

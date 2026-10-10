@@ -7,8 +7,14 @@ import { LANGUAGE_NAME } from './i18n.js'
 import Anthropic from '@anthropic-ai/sdk'
 import { angleById, RENDERABLE_ANGLE_IDS } from './angles.js'
 
+// Sonnet is the default on cost grounds; set CLAUDE_MODEL to trade up or down.
 export const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5-5'
 const MODEL = CLAUDE_MODEL
+/**
+ * Upper bound on output tokens (thinking included) for any one call, whatever
+ * the call site asks for. A runaway brief is cut off, not billed in full.
+ */
+const MAX_OUTPUT_TOKENS = Math.max(1024, Math.floor(Number(process.env.CLAUDE_MAX_OUTPUT_TOKENS) || 16000))
 
 let client = null
 function getClient() {
@@ -272,7 +278,7 @@ async function callStructured({ system, content, schema, maxTokens = 16000, effo
 
   const params = {
     model: MODEL,
-    max_tokens: maxTokens,
+    max_tokens: Math.min(maxTokens, MAX_OUTPUT_TOKENS),
     system,
     thinking: { type: 'adaptive' },
     messages: [{ role: 'user', content }],

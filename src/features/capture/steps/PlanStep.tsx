@@ -13,7 +13,8 @@ import { useTranslation } from 'react-i18next'
 import { Chip } from '@/ui/Chip'
 import { STYLES, formatMoney } from '@/lib/styles.js'
 import { usePrefs } from '@/store/prefs'
-import { GUEST_FREE_GENERATIONS, useSession } from '@/store/session'
+import { useSession } from '@/store/session'
+import { useRenderAllowance } from '@/lib/useRenderAllowance'
 
 import { ArrowButton, Bezel, Eyebrow, Notice, Rise } from '../Chrome'
 import { getHealth } from '../contract'
@@ -158,14 +159,10 @@ export function PlanStep({ flow }: { flow: CaptureFlow }) {
   const currency = usePrefs((state) => state.currency)
   const scale = SCALES[currency] || SCALES.UZS
 
-  // Credits are local counters (see store/session.ts). Subscribing to the raw
-  // fields keeps this line live when they change.
+  // The server's daily allowance when renders cost money; the local counters
+  // (store/session.ts) otherwise. `left` follows whichever applies.
   const user = useSession((s) => s.user)
-  const credits = useSession((s) => s.credits)
-  const guestUsed = useSession((s) => s.guestGenerationsUsed)
-  const left = user
-    ? Math.max(0, credits.total - credits.used)
-    : Math.max(0, GUEST_FREE_GENERATIONS - guestUsed)
+  const { left, quota, needsSignIn, dailyExhausted, resetTime } = useRenderAllowance()
 
   // Demo mode answers with canned rooms. Say so before the person spends a
   // thirty-second wait expecting their own.
@@ -372,14 +369,30 @@ export function PlanStep({ flow }: { flow: CaptureFlow }) {
                   {t('capture.plan.cta')}
                 </ArrowButton>
                 <p className="cap-plan__cost">
-                  {demo
-                    ? t('capture.plan.demoTitle', { defaultValue: 'Demo rejim' })
-                    : t('capture.plan.costLine', {
-                        left,
-                        defaultValue: '1 ta generatsiya sarflanadi · qoldi: {{left}}',
-                      })}
+                  {quota
+                    ? `${t('limits.left', { remaining: quota.remaining, limit: quota.limit })} · ${t('limits.resets', { time: resetTime })}`
+                    : demo
+                      ? t('capture.plan.demoTitle', { defaultValue: 'Demo rejim' })
+                      : t('capture.plan.costLine', {
+                          left,
+                          defaultValue: '1 ta generatsiya sarflanadi · qoldi: {{left}}',
+                        })}
                 </p>
               </>
+            ) : needsSignIn ? (
+              <>
+                <Notice tone="warn" title={t('limits.signinTitle')}>
+                  {t('limits.signinBody')}
+                </Notice>
+                <ArrowButton onClick={() => navigate('/signup?next=/app/capture')}>{t('nav.signup')}</ArrowButton>
+                <ArrowButton quiet onClick={() => navigate('/login?next=/app/capture')}>
+                  {t('limits.login')}
+                </ArrowButton>
+              </>
+            ) : dailyExhausted && quota ? (
+              <Notice tone="warn" title={t('limits.exhaustedTitle')}>
+                {t('limits.exhaustedBody', { limit: quota.limit, time: resetTime })}
+              </Notice>
             ) : (
               <>
                 <Notice

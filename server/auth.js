@@ -5,14 +5,13 @@
 //   they can be raised later without breaking existing accounts.
 // - Sessions: 32 random bytes sent to the browser in an httpOnly cookie; only
 //   the SHA-256 of the token is stored, so a leaked data file cannot be replayed.
-// - Storage: data/auth.json via the atomic JsonStore.
+// - Storage: whatever `createStorage()` picked — data/auth.json via the atomic
+//   JsonStore, or Postgres when DATABASE_URL is set (server/lib/storage.js).
 
 import crypto from 'node:crypto'
-import path from 'node:path'
 import { promisify } from 'node:util'
 import express from 'express'
 
-import { JsonStore } from './lib/jsonStore.js'
 import { HttpError, asyncRoute, badRequest, isProd, rateLimit } from './lib/http.js'
 
 const scrypt = promisify(crypto.scrypt)
@@ -23,8 +22,14 @@ const SCRYPT = { N: 32768, r: 8, p: 1, keylen: 64, maxmem: 64 * 1024 * 1024 }
 const MIN_PASSWORD = 8
 const MAX_PASSWORD = 512
 
-export function createAuth({ dataDir }) {
-  const store = new JsonStore(path.join(dataDir, 'auth.json'), () => ({ version: 1, users: [], sessions: [] }))
+/**
+ * @param {object} opts
+ * @param {ReturnType<typeof import('./lib/storage.js').createJsonStorage>} opts.storage
+ * @param {(user: object|null) => Promise<object>} [opts.describeUser] extra
+ *   fields for `/me` next to `user` (the render quota), so the client learns
+ *   both in one round trip.
+ */
+export function createAuth({ storage, describeUser }) {
 
   // ------------------------------------------------------------------ crypto
   async function hashPassword(password) {
@@ -92,7 +97,12 @@ export function createAuth({ dataDir }) {
       const i = part.indexOf('=')
       if (i < 0) continue
       if (part.slice(0, i).trim() === SESSION_COOKIE) {
-        const value = decodeURIComponent(part.slice(i + 1).trim())
+        let value
+        try {
+          value = decodeURIComponent(part.slice(i + 1).trim())
+        } catch {
+          return null // malformed %-escape: treat as no session, not a 500
+        }
         return /^[A-Za-z0-9_-]{20,100}$/.test(value) ? value : null
       }
     }
@@ -106,11 +116,10 @@ export function createAuth({ dataDir }) {
     path: '/',
   })
 
-  async function startSession(res, user, req, data) {
+  async function startSession(res, user, req) {
     const token = crypto.randomBytes(32).toString('base64url')
     const now = Date.now()
-    data.sessions = data.sessions.filter((s) => s.expiresAt > now)
-    data.sessions.push({
+    await storage.sessions.create({
       tokenHash: sha256(token),
       userId: user.id,
       createdAt: new Date(now).toISOString(),
@@ -124,13 +133,15 @@ export function createAuth({ dataDir }) {
   async function currentUser(req) {
     const token = readToken(req)
     if (!token) return null
-    const hash = sha256(token)
-    return store.read((data) => {
-      const session = data.sessions.find((s) => s.tokenHash === hash)
-      if (!session || session.expiresAt <= Date.now()) return null
-      const user = data.users.find((u) => u.id === session.userId)
+    try {
+      const user = await storage.sessions.findUser(sha256(token))
       return user ? publicUser(user) : null
-    })
+    } catch (err) {
+      // A storage hiccup reads as "signed out" for this request rather than a
+      // 500 on every page; it is still logged.
+      console.error('[auth] session lookup failed:', err.message)
+      return null
+    }
   }
 
   // ------------------------------------------------------------------ router
@@ -151,24 +162,22 @@ export function createAuth({ dataDir }) {
     asyncRoute(async (req, res) => {
       const { email, password, name } = readCredentials(req.body, { withName: true })
       const passwordHash = await hashPassword(password)
-      const user = await store.update(async (data) => {
-        if (data.users.some((u) => u.email === email)) {
-          throw new HttpError(409, 'An account with this email already exists.', {
-            code: 'email_taken',
-            fields: { email: 'An account with this email already exists.' },
-          })
-        }
-        const created = {
-          id: crypto.randomUUID(),
-          name,
-          email,
-          passwordHash,
-          createdAt: new Date().toISOString(),
-        }
-        data.users.push(created)
-        await startSession(res, created, req, data)
-        return created
+      // `create` is atomic per backend (store lock / UNIQUE constraint) and
+      // answers null when the email is already registered.
+      const user = await storage.users.create({
+        id: crypto.randomUUID(),
+        name,
+        email,
+        passwordHash,
+        createdAt: new Date().toISOString(),
       })
+      if (!user) {
+        throw new HttpError(409, 'An account with this email already exists.', {
+          code: 'email_taken',
+          fields: { email: 'An account with this email already exists.' },
+        })
+      }
+      await startSession(res, user, req)
       res.status(201).json({ user: publicUser(user) })
     })
   )
@@ -179,15 +188,12 @@ export function createAuth({ dataDir }) {
     loginEmailLimit,
     asyncRoute(async (req, res) => {
       const { email, password } = readCredentials(req.body, { withName: false })
-      const found = await store.read((data) => data.users.find((u) => u.email === email) || null)
+      const found = await storage.users.findByEmail(email)
       const ok = found ? await verifyPassword(password, found.passwordHash) : (await verifyPassword(password, await dummyHash), false)
       if (!found || !ok) {
         throw new HttpError(401, 'Email or password is incorrect.', { code: 'invalid_credentials' })
       }
-      await store.update(async (data) => {
-        const user = data.users.find((u) => u.id === found.id)
-        if (user) await startSession(res, user, req, data)
-      })
+      await startSession(res, found, req)
       res.json({ user: publicUser(found) })
     })
   )
@@ -197,10 +203,7 @@ export function createAuth({ dataDir }) {
     asyncRoute(async (req, res) => {
       const token = readToken(req)
       if (token) {
-        const hash = sha256(token)
-        await store.update((data) => {
-          data.sessions = data.sessions.filter((s) => s.tokenHash !== hash && s.expiresAt > Date.now())
-        })
+        await storage.sessions.delete(sha256(token))
       }
       res.clearCookie(SESSION_COOKIE, cookieOptions())
       res.status(204).end()
@@ -216,10 +219,10 @@ export function createAuth({ dataDir }) {
         // Guests are a normal state, not an error: answering 200 keeps every
         // anonymous page load from logging a failed request in the console.
         res.set('Cache-Control', 'no-store')
-        return res.json({ user: null })
+        return res.json({ user: null, ...(describeUser ? await describeUser(null) : {}) })
       }
       res.set('Cache-Control', 'no-store')
-      res.json({ user })
+      res.json({ user, ...(describeUser ? await describeUser(user) : {}) })
     })
   )
 

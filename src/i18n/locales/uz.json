@@ -357,5 +357,9 @@
     "step": "bosqich",
     "legal": "Huquqiy",
     "newProject": "Yangi loyiha boshlash"
+  },
+  "wake": {
+    "waking": "Server uygʻonmoqda — bepul serverimiz boʻsh turganda uxlab qoladi. Bir daqiqagacha vaqt olishi mumkin…",
+    "down": "Server hozir javob bermayapti."
   }
 }

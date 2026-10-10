@@ -1,0 +1,68 @@
+# Render.com Blueprint for the FrameSpace API (free web service, no card).
+#
+# Render → New → Blueprint → pick this GitHub repo; it reads this file.
+# Only the API runs here. The frontend stays on Vercel, which forwards /api/*
+# to this service (see vercel.json) — so the browser only ever talks to the
+# Vercel domain and the session cookie stays first-party.
+#
+# Free-tier facts worth knowing:
+#   - the service sleeps after ~15 idle minutes; the next request takes
+#     30–60 s while it boots (the frontend shows "waking up the server")
+#   - the disk is wiped on every deploy and restart → set DATABASE_URL
+#     (Neon or Supabase free Postgres), or accounts will vanish
+#   - 512 MB RAM, shared CPU — fine for this API, which only relays AI calls
+#
+# Values marked `sync: false` are secrets: Render asks for them when the
+# Blueprint is created and never stores them in git.
+
+services:
+  - type: web
+    name: framespace-api
+    runtime: node
+    plan: free
+    # Closest Render region to Central Asia. Put the database in the same
+    # region (Neon: AWS Europe Central / Frankfurt).
+    region: frankfurt
+    branch: main
+    # The API needs no frontend build; dev dependencies are skipped.
+    buildCommand: npm ci --omit=dev
+    startCommand: node server/index.js
+    # Cheap route, no database round trip — safe to poll.
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production # Secure cookies, quieter errors
+      # Browser → Vercel → Render's proxy → app: two proxies in front of us,
+      # so the client IP is the second hop from the end. Use 1 if you ever
+      # call this service directly instead of through Vercel.
+      - key: TRUST_PROXY
+        value: "2"
+
+      # --- database (strongly recommended on this host) ---
+      - key: DATABASE_URL
+        sync: false # paste the Neon/Supabase connection string
+      - key: DATABASE_SSL
+        value: verify # Neon: verify. Supabase: no-verify (its own CA)
+
+      # --- AI providers (leave empty to run the free demo) ---
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CLAUDE_MODEL
+        value: claude-sonnet-5-5
+
+      # --- cost controls ---
+      - key: RENDER_DAILY_QUOTA
+        value: "5" # renders per signed-in user per UTC day
+      - key: GLOBAL_DAILY_RENDER_CAP
+        value: "100" # renders per UTC day for everyone together → then 503
+      - key: GEMINI_MAX_IMAGES_PER_REQUEST
+        value: "4"
+      - key: CLAUDE_MAX_OUTPUT_TOKENS
+        value: "16000"
+      - key: RENDER_RATE_LIMIT
+        value: "20" # per IP per 10 minutes

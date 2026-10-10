@@ -1,12 +1,23 @@
 import i18n from '@/i18n/config'
+import { apiGet, ensureAwake, isGatewayFailure, markAwake } from '@/lib/wake'
 
+/**
+ * Errors carry `status`, the server's `code` (`unauthenticated`,
+ * `quota_exceeded`, `capacity`, `rate_limited`, …) and its `details`, so a
+ * screen can pick its own translated copy instead of showing raw text.
+ */
 async function post(url, body, signal) {
+  // A sleeping free-tier server is woken (and waited for) before the body is
+  // sent: a POST is never retried, so it must not go out into a boot.
+  await ensureAwake()
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify(body),
     signal,
   })
+  if (!isGatewayFailure(res)) markAwake()
   const payload = await res.json().catch(() => ({}))
   if (!res.ok) {
     const err = new Error(
@@ -14,6 +25,8 @@ async function post(url, body, signal) {
         (res.status === 413 ? 'Photos are too large to send (413).' : `Request failed (${res.status})`)
     )
     err.status = res.status
+    err.code = payload.code || (isGatewayFailure(res) ? 'gateway' : undefined)
+    err.details = payload.details
     throw err
   }
   return payload
@@ -26,7 +39,7 @@ export async function getHealth() {
   // A few screens ask at once; one answer per 15 s is plenty.
   if (healthCache && Date.now() - healthAt < 15_000) return healthCache
   try {
-    const res = await fetch('/api/health')
+    const res = await apiGet('/api/health')
     if (!res.ok) throw new Error()
     healthCache = await res.json()
     healthAt = Date.now()

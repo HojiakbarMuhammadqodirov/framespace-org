@@ -9,6 +9,7 @@ import { Tilt } from '@/ui/Interactive'
 import { Seo } from '@/lib/seo'
 import { cn } from '@/lib/cn'
 import { GUEST_FREE_GENERATIONS, useSession } from '@/store/session'
+import { useRenderAllowance } from '@/lib/useRenderAllowance'
 import { useDateFormat } from '@/features/capture/hooks'
 import { listRecords } from '@/features/capture/store'
 import { useMoneyIn } from '@/features/capture/money'
@@ -950,9 +951,11 @@ function CreditsMeter() {
   const user = useSession((s) => s.user)
   const credits = useSession((s) => s.credits)
   const guestUsed = useSession((s) => s.guestGenerationsUsed)
+  // When the server enforces a daily allowance it is the real number.
+  const { quota, resetTime } = useRenderAllowance()
 
-  const total = user ? credits.total : GUEST_FREE_GENERATIONS
-  const used = user ? credits.used : guestUsed
+  const total = quota ? quota.limit : user ? credits.total : GUEST_FREE_GENERATIONS
+  const used = quota ? quota.used : user ? credits.used : guestUsed
   const left = Math.max(0, total - used)
   // Twelve segments is the most that still reads as countable at this size.
   const segments = Math.max(1, Math.min(total, 12))
@@ -989,7 +992,11 @@ function CreditsMeter() {
       </div>
 
       <p style={{ marginTop: 'var(--s4)', fontSize: 'var(--step--1)', color: 'var(--text-muted)' }}>
-        {user ? t('app.dash.credits.renew') : t('app.dash.credits.guestBody')}
+        {quota
+          ? t('limits.resets', { time: resetTime })
+          : user
+            ? t('app.dash.credits.renew')
+            : t('app.dash.credits.guestBody')}
       </p>
 
       <div style={{ marginTop: 'var(--s5)' }}>

@@ -7,13 +7,14 @@ import cors from 'cors'
 
 import { ANGLES, REQUIRED_ANGLE_IDS, angleById, RENDERABLE_ANGLE_IDS } from './angles.js'
 import { buildDesignBrief, buildSceneBrief, claudeConfigured, CLAUDE_MODEL } from './claude.js'
-import { renderAll, renderSceneAll, geminiConfigured, GEMINI_MODEL } from './gemini.js'
+import { renderAll, renderSceneAll, geminiConfigured, GEMINI_MODEL, MAX_IMAGES_PER_REQUEST } from './gemini.js'
 import { demoBrief, demoRenders } from './demo.js'
 import { demoSceneBrief, demoSceneRender, sceneExistingFeatures, sceneFurniture } from './sceneDemo.js'
 import { SCENE_VIEWS, describeScene, sceneLines, validateScene, viewPrompt } from './scene.js'
 import { createAuth } from './auth.js'
+import { createRenderGuard } from './quota.js'
 import { angleLabel, resolveLocale, t as tr } from './i18n.js'
-import { JsonStore } from './lib/jsonStore.js'
+import { createStorage } from './lib/storage.js'
 import {
   HttpError,
   apiNotFound,
@@ -21,6 +22,7 @@ import {
   badRequest,
   errorHandler,
   isProd,
+  logEvent,
   rateLimit,
   requestLogger,
   securityHeaders,
@@ -30,10 +32,22 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(here, 'data'))
 
+// Postgres when DATABASE_URL is set, JSON files under DATA_DIR otherwise. A
+// database that cannot be reached is fatal at boot: better a failed deploy
+// than a server that loses every sign-up.
+let storage
+try {
+  storage = await createStorage({ dataDir: DATA_DIR })
+} catch (err) {
+  logEvent('error', 'storage_init_failed', { error: err })
+  process.exit(1)
+}
+
 const app = express()
 app.disable('x-powered-by')
-// Behind a reverse proxy (Render, Fly, nginx) set TRUST_PROXY=1 so req.ip and
-// req.secure reflect the real client — rate limits and Secure cookies need it.
+// Behind a reverse proxy set TRUST_PROXY so req.ip and req.secure reflect the
+// real client — rate limits need it. Render alone: 1. Vercel rewrite → Render
+// (two proxies, see render.yaml): 2.
 if (process.env.TRUST_PROXY) app.set('trust proxy', /^\d+$/.test(process.env.TRUST_PROXY) ? Number(process.env.TRUST_PROXY) : process.env.TRUST_PROXY)
 
 app.use(securityHeaders)
@@ -49,20 +63,36 @@ const corsOrigins = (process.env.CORS_ORIGINS || '')
 if (corsOrigins.length) app.use('/api', cors({ origin: corsOrigins, credentials: true }))
 
 // Body limits: six photos at ~1280px come to a few MB of base64; everything
-// else is small JSON.
+// else is small JSON. The big render body is parsed inside the route, *after*
+// the sign-in and quota checks, so an anonymous client cannot make the server
+// read 30 MB just to be told 401. Client error reports get a tiny limit.
 const RENDER_BODY_LIMIT = process.env.RENDER_BODY_LIMIT || '30mb'
-app.use('/api/render', express.json({ limit: RENDER_BODY_LIMIT }))
-app.use('/api', express.json({ limit: '1mb' }))
+const renderBody = express.json({ limit: RENDER_BODY_LIMIT })
+const smallBody = express.json({ limit: '1mb' })
+const tinyBody = express.json({ limit: '16kb' })
+app.use('/api', (req, res, next) => {
+  if (req.path === '/render') return next()
+  if (req.path === '/client-errors') return tinyBody(req, res, next)
+  return smallBody(req, res, next)
+})
 
 const demoMode = !claudeConfigured() || !geminiConfigured()
+// Any configured key can spend money — Claude alone runs on /api/render even
+// while Gemini is missing (demoMode is still true then). Cost controls key off
+// this, not off demoMode.
+const billable = () => claudeConfigured() || geminiConfigured()
 
 // ------------------------------------------------------------------- health
+// Cheap on purpose (no database round trip): Render's health checker and the
+// frontend's wake-up probe both hit it.
 app.get('/api/health', (req, res) => {
   res.json({
     ok: true,
     demoMode,
     providers: { claude: claudeConfigured(), gemini: geminiConfigured() },
     models: { claude: CLAUDE_MODEL, gemini: GEMINI_MODEL },
+    storage: storage.kind,
+    renders: { requireAuth: renderGuard.enforced(), dailyQuota: renderGuard.settings.dailyQuota },
     uptimeS: Math.round(process.uptime()),
   })
 })
@@ -72,8 +102,21 @@ app.get('/api/angles', (req, res) => {
 })
 
 // --------------------------------------------------------------------- auth
-const auth = createAuth({ dataDir: DATA_DIR })
+// /me reports the render quota too. Auth and the guard need each other, so the
+// callback resolves `renderGuard` per request, after both exist.
+let renderGuard
+const auth = createAuth({ storage, describeUser: (user) => renderGuard.describe(user) })
+renderGuard = createRenderGuard({ storage, auth, billable })
 app.use('/api/auth', timeout(30_000), auth.router)
+
+// Remaining renders today for the signed-in user (`quota: null` for guests).
+app.get(
+  '/api/quota',
+  asyncRoute(async (req, res) => {
+    const user = await auth.currentUser(req)
+    res.json(await renderGuard.describe(user))
+  })
+)
 
 // ------------------------------------------------------------------- render
 const renderLimiter = rateLimit({
@@ -157,7 +200,7 @@ function validateRender(body) {
 function providerFailure(err, what, locale = 'en') {
   const E = tr(locale).errors
   const status = Number(err?.status || 0)
-  console.error(`[${what}]`, status || '', err?.message || err)
+  logEvent('error', 'provider_error', { stage: what, status: status || undefined, message: String(err?.message || err).slice(0, 500) })
   if (err?.expose && (status === 422 || status === 502)) return new HttpError(status, err.message, { code: 'provider_error' })
   if (status === 429 || status === 529) {
     return new HttpError(503, E.busy, { code: 'provider_busy', headers: { 'Retry-After': '30' } })
@@ -188,6 +231,8 @@ function reconcileBudget(brief, budget) {
 app.post(
   '/api/render',
   renderLimiter,
+  renderGuard.guard,
+  renderBody,
   timeout(RENDER_TIMEOUT_MS),
   asyncRoute(async (req, res) => {
     const { photos, style, notes, budget } = validateRender(req.body)
@@ -212,7 +257,7 @@ app.post(
     const jobs = (Array.isArray(brief.renderPrompts) ? brief.renderPrompts : [])
       .filter((rp) => rp && photoByAngle.has(rp.angleId) && RENDERABLE_ANGLE_IDS.includes(rp.angleId))
       .filter((rp, i, all) => all.findIndex((x) => x.angleId === rp.angleId) === i)
-      .slice(0, 4)
+      .slice(0, Math.min(4, MAX_IMAGES_PER_REQUEST))
       .map((rp) => ({
         angleId: rp.angleId,
         angleLabel: rp.angleLabel || angleLabel(rp.angleId, locale, angleById(rp.angleId)?.label),
@@ -230,7 +275,16 @@ app.post(
       })
     }
 
-    res.json({ demoMode, style, locale, brief, renders, failures, elapsedMs: Date.now() - startedAt })
+    res.json({
+      demoMode,
+      style,
+      locale,
+      brief,
+      renders,
+      failures,
+      elapsedMs: Date.now() - startedAt,
+      ...(req.renderQuota ? { quota: req.renderQuota } : {}),
+    })
   })
 )
 
@@ -239,6 +293,7 @@ app.post(
 app.post(
   '/api/render-scene',
   renderLimiter,
+  renderGuard.guard,
   timeout(RENDER_TIMEOUT_MS),
   asyncRoute(async (req, res) => {
     const scene = validateScene(req.body)
@@ -302,6 +357,10 @@ app.post(
       renders = brief.renderPrompts.map((rp) => ({ ...rp, image: demoSceneRender(scene, rp.angleId, brief.design) }))
     }
 
+    // Every provider failed and the person got only the drawings: that is not
+    // worth one of their daily generations.
+    if (billable() && brief.demo !== false && renders.every((r) => r.fallback)) req.releaseRenderQuota?.()
+
     res.json({
       demoMode,
       style: scene.style,
@@ -311,12 +370,12 @@ app.post(
       failures,
       warnings,
       elapsedMs: Date.now() - startedAt,
+      ...(req.renderQuota ? { quota: req.renderQuota } : {}),
     })
   })
 )
 
 // ------------------------------------------------------------------ contact
-const contactStore = new JsonStore(path.join(DATA_DIR, 'messages.json'), () => [])
 const contactLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, name: 'messages' })
 
 app.post(
@@ -339,16 +398,58 @@ app.post(
     const user = await auth.currentUser(req)
     const entry = { name, email, message, userId: user?.id || null, receivedAt: new Date().toISOString() }
     try {
-      await contactStore.update((list) => {
-        list.push(entry)
-      })
+      await storage.messages.add(entry)
     } catch (err) {
-      console.error('[contact]', err)
+      logEvent('error', 'storage_error', { op: 'contact', reqId: req.id, error: err })
       throw new HttpError(500, 'Could not save your message. Try again.', { code: 'storage' })
     }
     res.json({ ok: true })
   })
 )
+
+// ------------------------------------------------------------ client errors
+// The browser's error reporter (src/lib/errorReporter.ts) posts here. Free,
+// no third party: each report becomes one structured log line and the newest
+// CLIENT_ERRORS_KEEP are kept in storage. Everything is re-sanitised here —
+// never trust the client to have stripped what it promised to.
+const CLIENT_ERRORS_KEEP = Math.max(10, Number(process.env.CLIENT_ERRORS_KEEP || 200))
+const clientErrorLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 30, name: 'error reports' })
+
+const clip = (v, n) => (typeof v === 'string' ? v.slice(0, n) : undefined)
+/** Remove things that look like secrets or personal data from free text. */
+function scrub(text) {
+  if (!text) return text
+  return text
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[email]')
+    .replace(/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}/g, '[key]')
+    .replace(/\b(?:eyJ[\w-]+\.){2}[\w-]+/g, '[jwt]')
+    .replace(/data:[\w/+.-]+;base64,[A-Za-z0-9+/=]{16,}/g, '[data-url]')
+    .replace(/(https?:\/\/[^\s?#'")]+)[?#][^\s'")]*/g, '$1') // query strings and fragments of URLs
+}
+
+app.post('/api/client-errors', clientErrorLimiter, (req, res) => {
+  const b = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : null
+  if (!b || typeof b.message !== 'string' || !b.message.trim()) {
+    return res.status(400).json({ error: 'Send an error report as a JSON object with a message.', code: 'validation', fields: { message: 'required' } })
+  }
+  const entry = {
+    receivedAt: new Date().toISOString(),
+    kind: ['error', 'unhandledrejection', 'react', 'manual'].includes(b.kind) ? b.kind : 'error',
+    message: scrub(clip(b.message, 500)),
+    stack: scrub(clip(b.stack, 4000)),
+    source: scrub(clip(b.source, 300)),
+    line: Number.isFinite(b.line) ? b.line : undefined,
+    column: Number.isFinite(b.column) ? b.column : undefined,
+    path: scrub(clip(b.path, 300)),
+    release: clip(b.release, 64),
+    userAgent: clip(String(req.headers['user-agent'] || ''), 200),
+    reqId: req.id,
+  }
+  logEvent('error', 'client_error', entry)
+  // Storage is best effort: the log line above is the record that matters.
+  storage.clientErrors.add(entry, CLIENT_ERRORS_KEEP).catch((err) => logEvent('warn', 'storage_error', { op: 'client-errors', error: err }))
+  res.status(204).end()
+})
 
 // Unknown API routes get JSON, never the SPA shell.
 app.use('/api', apiNotFound)
@@ -370,7 +471,9 @@ app.get(/.*/, (req, res, next) => {
   if (path.extname(req.path) || !req.accepts('html')) return next()
   if (!fs.existsSync(indexHtml)) return next()
   res.setHeader('Cache-Control', 'no-cache')
-  res.sendFile(indexHtml)
+  // `root` keeps send's dotfile guard to the file name: an absolute path with a
+  // dot-directory anywhere in it (e.g. ~/.cache/app/dist) would otherwise 404.
+  res.sendFile('index.html', { root: dist })
 })
 app.use((req, res) => {
   res.status(404).type('text/plain').send('Not found')
@@ -379,10 +482,17 @@ app.use((req, res) => {
 app.use(errorHandler)
 
 // ---------------------------------------------------------------- lifecycle
+// Hosts like Render route traffic to PORT on 0.0.0.0; binding only localhost
+// would make the service unreachable there.
 const port = Number(process.env.PORT) || 8787
-const server = app.listen(port, () => {
-  console.log(`FrameSpace API on http://localhost:${port}${isProd ? ' (production)' : ''}`)
-  console.log(`  data dir: ${DATA_DIR}`)
+const host = process.env.HOST || '0.0.0.0'
+const server = app.listen(port, host, () => {
+  console.log(`FrameSpace API on http://${host === '0.0.0.0' ? 'localhost' : host}:${port}${isProd ? ' (production)' : ''}`)
+  console.log(`  storage: ${storage.describe()}`)
+  const g = renderGuard.settings
+  console.log(
+    `  renders: ${renderGuard.enforced() ? `sign-in required, ${g.dailyQuota}/user/day, ${g.globalCap}/day overall` : 'open (demo, nothing billable)'}; max ${MAX_IMAGES_PER_REQUEST} images/request`
+  )
   if (demoMode) {
     console.log(
       `  DEMO MODE — claude:${claudeConfigured() ? 'ok' : 'missing key'} gemini:${
@@ -401,7 +511,12 @@ function shutdown(signal) {
   if (shuttingDown) return
   shuttingDown = true
   console.log(`${signal} received — closing server`)
-  server.close(() => process.exit(0))
+  server.close(() => {
+    storage
+      .close()
+      .catch(() => {})
+      .finally(() => process.exit(0))
+  })
   server.closeIdleConnections?.()
   // In-flight renders get a grace period, then we go regardless.
   setTimeout(() => {
@@ -411,4 +526,6 @@ function shutdown(signal) {
 }
 process.on('SIGINT', () => shutdown('SIGINT'))
 process.on('SIGTERM', () => shutdown('SIGTERM'))
-process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err))
+process.on('unhandledRejection', (err) =>
+  logEvent('error', 'unhandled_rejection', { error: err instanceof Error ? err : new Error(String(err)) })
+)
