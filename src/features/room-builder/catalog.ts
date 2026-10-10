@@ -1,9 +1,10 @@
 /**
  * The furniture catalogue.
  *
- * There are no .glb assets in this repository and none are wanted, so every
- * piece is described here as a box of real dimensions and built from primitive
- * geometry in src/three/builder. Prices are UZS, mid-market Tashkent retail —
+ * Every piece is described here as a box of real dimensions. Most kinds render
+ * a real glTF model scaled into that box (`BUILDER_REAL_MODEL` in
+ * src/three/furniture/real.tsx); the rest — and every kind while its model
+ * loads — are built from procedural geometry. Prices are UZS, mid-market Tashkent retail —
  * they exist to make the budget counter mean something, not as a price list.
  *
  * Labels are NOT here: they live in src/i18n/sections/builder.ts under

@@ -103,6 +103,16 @@ the native pointer replaced.
   drawn to a canvas as roughness maps and cached, so nothing is downloaded and
   the ~30 catalog viewers share one texture upload. Upholstery is
   `MeshPhysicalMaterial` with sheen.
+- **Real furniture models.** Sofa, armchairs, dining chair, coffee/dining
+  table, desk, shelf, sideboard, plant, pendant and screen are now
+  photo-textured glTF models (Poly Haven CC0 + Khronos sample assets; one is
+  CC BY 4.0 — see `public/models/furniture/CREDITS.md`), 12 files / 6.0 MB,
+  WebP textures + Meshopt geometry, built by `scripts/furniture/build-models.mjs`.
+  `src/three/furniture/real.tsx` loads them with drei `useGLTF` (Meshopt
+  decoder is inline, no CDN), scales each into the catalogue's w×d×h, and
+  keeps the procedural piece as the Suspense/error fallback. Upholstery follows
+  the chosen finish; wood/stone/metal keep their scanned textures. Bed,
+  wardrobe, rug and floor lamp remain procedural (no good free model yet).
 - **Atmosphere**: dust motes in the window beam, a light shaft, imperceptible
   lamp flicker, and a camera "breath" driven through `fov` rather than position
   (OrbitControls' damped update would overwrite a position write).
@@ -152,7 +162,7 @@ a fifth was built up to the seam and stopped there, in the open.
 | **No cancel during generation** | — | `requestRender()` takes no `AbortSignal`; offering a cancel button would be a lie |
 | **3D builder "Generate"** | Serialises the full scene payload, logs it, shows a sheet naming the missing route and the four gaps | `POST /api/render-scene` |
 | **"See by yourself" Mode A** (live AI restyle) | Full UI and WebRTC client pipeline, gated behind a "not connected" state | `VITE_LIVE_RESTYLE_URL` + a server module minting short-lived session tokens. Contract documented at the top of `src/features/live/realtime.ts` |
-| **Mode B (WebXR AR)** | Real `immersive-ar` session, hit-test, anchors — with placeholder geometry | `.glb` / `.usdz` model files |
+| **Mode B (WebXR AR)** | Real `immersive-ar` session, hit-test, anchors; sofa and table use the real `.glb` models, the lamp a placeholder | `.usdz` files for iOS Quick Look; a floor-lamp model |
 | **Catalog & business data** | Typed local demo data shaped exactly like an API response | A product database, model storage, analytics |
 | **Share links** | Copy a URL that resolves on this device only, and the UI says that | Object storage + a share endpoint |
 

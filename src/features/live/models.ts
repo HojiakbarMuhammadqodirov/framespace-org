@@ -1,33 +1,54 @@
+import { realModelUrl, type RealModelId } from '@/three/furniture/real'
+
 /**
- * Where the furniture models will come from.
+ * Where the AR furniture models come from.
  *
- * There are no .glb or .usdz files in this repository and none may be
- * downloaded, so this registry is empty and the AR modes say so plainly
- * instead of pretending. The shape is the point: when the catalog (step 9)
- * starts producing assets, filling `glb` and `usdz` in is the entire change —
- * `ModeAugmented` already branches on their presence, `<model-viewer>` and AR
- * Quick Look already read them, and the placeholder geometry already carries
- * the same footprint so nothing shifts when a real model lands.
+ * The sofa and the table are real, freely licensed glTF models shared with the
+ * catalog and the room builder (`src/three/furniture/real.tsx`, credits in
+ * `public/models/furniture/CREDITS.md`). `ArScene` renders them scaled into
+ * `size`, with the placeholder geometry as the loading/error fallback, so
+ * nothing shifts when a model lands. The lamp has no good free model yet and
+ * keeps its placeholder. No `.usdz` exists, so AR Quick Look (iOS) still says
+ * so plainly — `ModeAugmented` branches on `usdz` being present.
  */
 
 export interface LiveModel {
   id: string
   /** i18n key under `live.ar.items.*`. */
   labelKey: string
-  /** Metres: width (x), height (y), depth (z). Drives the placeholder. */
+  /** Metres: width (x), height (y), depth (z). Drives the model and the placeholder. */
   size: [number, number, number]
-  /** Loaded by WebXR / <model-viewer>. Null until the catalog ships one. */
+  /** Real model rendered in WebXR, or null for the placeholder. */
+  real: RealModelId | null
+  /** Its .glb URL (for <model-viewer> / Scene Viewer). Null when `real` is. */
   glb: string | null
-  /** iOS AR Quick Look. Null until the catalog ships one. */
+  /** iOS AR Quick Look. Null until a .usdz is produced. */
   usdz: string | null
-  /** Which placeholder to build when `glb` is null. */
+  /** Which placeholder to build while loading, or when `real` is null. */
   placeholder: 'seat' | 'table' | 'lamp'
 }
 
+function live(
+  id: string,
+  size: [number, number, number],
+  real: RealModelId | null,
+  placeholder: LiveModel['placeholder']
+): LiveModel {
+  return {
+    id,
+    labelKey: `live.ar.items.${id}`,
+    size,
+    real,
+    glb: real ? realModelUrl(real) : null,
+    usdz: null,
+    placeholder,
+  }
+}
+
 export const LIVE_MODELS: LiveModel[] = [
-  { id: 'sofa', labelKey: 'live.ar.items.sofa', size: [2.05, 0.78, 0.92], glb: null, usdz: null, placeholder: 'seat' },
-  { id: 'table', labelKey: 'live.ar.items.table', size: [1.1, 0.45, 0.6], glb: null, usdz: null, placeholder: 'table' },
-  { id: 'lamp', labelKey: 'live.ar.items.lamp', size: [0.34, 1.55, 0.34], glb: null, usdz: null, placeholder: 'lamp' },
+  live('sofa', [2.05, 0.78, 0.92], 'sofa-glam', 'seat'),
+  live('table', [1.1, 0.45, 0.6], 'coffeetable-stone', 'table'),
+  live('lamp', [0.34, 1.55, 0.34], null, 'lamp'),
 ]
 
 export function modelById(id: string): LiveModel | undefined {

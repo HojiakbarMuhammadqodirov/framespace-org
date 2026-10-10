@@ -18,6 +18,8 @@ import {
   type Tier,
 } from '../furniture/materials'
 import { disposeMaterialDeep } from '../materials/maps'
+import { QUALITY } from '@/features/room-builder/quality'
+import { BUILDER_REAL_MODEL, RealOrProcedural, preloadRealModel } from '../furniture/real'
 import {
   Armchair,
   Bed,
@@ -35,8 +37,19 @@ import {
 } from '../furniture/models'
 
 /**
- * Catalogue pieces, built from the shared procedural furniture library
- * (`src/three/furniture`) at each entry's real dimensions.
+ * Catalogue pieces at each entry's real dimensions: a real, freely licensed
+ * glTF model where one exists for the kind (`src/three/furniture/real.tsx`,
+ * credits in `public/models/furniture/CREDITS.md`), otherwise — and while that
+ * model loads, or if it fails — the shared procedural furniture library
+ * (`src/three/furniture/models.tsx`).
+ *
+ * Real models are measured and scaled into the catalogue box, so the
+ * footprint the store collides and wall-snaps with is still the truth.
+ * Pointer events bubble from any of a model's meshes to the piece group, so
+ * selecting, dragging and the selection outline work identically either way.
+ * Finish colour reaches a real model only on upholstered kinds (sofa,
+ * armchair); wood, stone and metal keep their photographed textures, because
+ * multiplying a scanned walnut by an "oak" swatch reads as paint, not timber.
  *
  * Every piece owns exactly one material — its finish — so a finish change is
  * a colour cross-fade rather than a cut, the same lerp idiom HeroRoom uses.
@@ -149,7 +162,32 @@ function FloorLampPiece({ entry, m }: { entry: CatalogEntry; m: FurnitureMats })
   return <FloorLamp m={m} h={entry.h} lit={lit} intensity={lighting === 'lamps' ? 7 : 4} />
 }
 
+/**
+ * The real, photographed model for the kind when one exists (see
+ * `../furniture/real.tsx`), with the procedural piece as its loading and
+ * error fallback, so nothing ever pops to empty. Upholstered kinds follow the
+ * item's finish: the procedural finish material keeps cross-fading and the
+ * model's tintable fabric copies its colour every frame.
+ */
 function Body({ entry, m }: { entry: CatalogEntry; m: FurnitureMats }) {
+  const tier = useBuilder((s) => s.quality)
+  const procedural = <ProceduralBody entry={entry} m={m} />
+  const id = BUILDER_REAL_MODEL[entry.kind]
+  const upholstered = FINISH_ROLE[entry.kind][0] === 'upholstery'
+  return (
+    <RealOrProcedural
+      id={id}
+      fallback={procedural}
+      w={entry.w}
+      d={entry.d}
+      h={entry.h}
+      tint={upholstered ? (m.upholstery as THREE.MeshStandardMaterial).color : null}
+      castShadow={QUALITY[tier].shadows}
+    />
+  )
+}
+
+function ProceduralBody({ entry, m }: { entry: CatalogEntry; m: FurnitureMats }) {
   const { w, d, h } = entry
   switch (entry.kind) {
     case 'sofa':
@@ -249,6 +287,15 @@ function Piece({ item, colliding }: { item: Item; colliding: boolean }) {
 
 export function Furniture({ collisions }: { collisions: Set<string> }) {
   const items = useBuilder((s) => s.scene.items)
+  // Start every model in the room downloading at once instead of one
+  // Suspense boundary at a time (useGLTF de-dupes repeat requests).
+  // Keyed on the set of catalogue ids, not on positions, so a drag does not re-run it.
+  const catalogKey = [...new Set(items.map((item) => item.catalogId))].sort().join(',')
+  useEffect(() => {
+    for (const id of catalogKey.split(',')) {
+      if (id) preloadRealModel(BUILDER_REAL_MODEL[entryFor(id).kind])
+    }
+  }, [catalogKey])
   return (
     <group>
       {items.map((item) => (
