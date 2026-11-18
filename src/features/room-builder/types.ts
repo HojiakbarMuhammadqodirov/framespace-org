@@ -92,6 +92,43 @@ export interface Item {
   /** Yaw in radians. 0 faces south (+z), matching a piece against the north wall. */
   rotation: number
   material: MaterialKey
+  /**
+   * Custom dimensions in metres, set when the piece has been resized in the
+   * inspector. Absent = the catalogue's own size. Always read a piece's size
+   * through `sizeOf(item)` (catalog.ts), never straight off the entry.
+   */
+  size?: ItemSize
+}
+
+export interface ItemSize {
+  w: number
+  d: number
+  h: number
+}
+
+/** Floor coverings the room panel offers. Labels are translated, keys are not. */
+export type FloorKey =
+  | 'oak'
+  | 'walnut'
+  | 'herringbone'
+  | 'ash'
+  | 'tile'
+  | 'concrete'
+  | 'carpet'
+
+/**
+ * The room's own finishes: what the walls, floor and ceiling are made of.
+ * Wall paint is one colour for the room plus optional per-wall overrides, so
+ * an accent wall is one tap rather than a second paint system.
+ */
+export interface Surfaces {
+  /** Hex paint colour for every wall without an override. */
+  wall: string
+  /** Accent walls: wall id → hex. */
+  wallOverrides: Partial<Record<WallId, string>>
+  floor: FloorKey
+  /** Hex ceiling colour. */
+  ceiling: string
 }
 
 export type LightingPreset = 'morning' | 'afternoon' | 'evening' | 'lamps'
@@ -100,6 +137,8 @@ export interface Scene {
   room: Room
   fixtures: Fixture[]
   items: Item[]
+  /** Wall paint, flooring and ceiling. */
+  surfaces: Surfaces
   lighting: LightingPreset
   /** Chosen budget ceiling, UZS. */
   budget: number
@@ -112,7 +151,12 @@ export interface Selection {
   id: string
 }
 
-export type ViewMode = 'plan' | 'perspective'
+/**
+ * `plan` is straight overhead, `perspective` orbits the room from outside, and
+ * `walk` stands the camera inside at eye level under the ceiling — the view a
+ * person in the room would actually have.
+ */
+export type ViewMode = 'plan' | 'perspective' | 'walk'
 
 /** What the pointer is currently pushing around. */
 export type Drag =

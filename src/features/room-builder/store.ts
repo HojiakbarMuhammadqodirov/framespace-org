@@ -16,7 +16,7 @@
  */
 import { create } from 'zustand'
 import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware'
-import { entryFor, MATERIAL_KEYS } from './catalog'
+import { DEFAULT_SURFACES, clampSize, entryFor, MATERIAL_KEYS, sizeOf } from './catalog'
 import {
   GRID,
   WALL_MAGNET,
@@ -40,14 +40,17 @@ import type {
   Drag,
   Fixture,
   FixtureKind,
+  FloorKey,
   FloorPicker,
   Item,
+  ItemSize,
   LightingPreset,
   MaterialKey,
   Room,
   RoomShape,
   Scene,
   Selection,
+  Surfaces,
   Vec2,
   ViewMode,
   Wall,
@@ -61,6 +64,38 @@ export const DEFAULT_BUDGET = 18_000_000
 
 export const BUDGET_PRESETS = [9_000_000, 18_000_000, 35_000_000, 70_000_000]
 
+function defaultSurfaces(): Surfaces {
+  return { ...DEFAULT_SURFACES, wallOverrides: {} }
+}
+
+const HEX = /^#[0-9a-f]{6}$/i
+
+/**
+ * Scenes saved before wall paint, flooring and resizing existed have no
+ * `surfaces` and no item sizes. They are upgraded on load rather than thrown
+ * away: a room somebody spent an evening on must open after an update.
+ */
+function upgradeScene(scene: Scene): Scene {
+  const stored = (scene as Partial<Scene>).surfaces
+  const base = defaultSurfaces()
+  const surfaces: Surfaces = {
+    wall: stored && HEX.test(stored.wall) ? stored.wall : base.wall,
+    wallOverrides:
+      stored?.wallOverrides && typeof stored.wallOverrides === 'object'
+        ? { ...stored.wallOverrides }
+        : {},
+    floor: stored?.floor ?? base.floor,
+    ceiling: stored && HEX.test(stored.ceiling) ? stored.ceiling : base.ceiling,
+  }
+  return {
+    ...scene,
+    surfaces,
+    items: scene.items.map((item) =>
+      item.size ? { ...item, size: clampSize(item.catalogId, item.size) } : item
+    ),
+  }
+}
+
 function initialScene(): Scene {
   const room = { ...SHAPE_PRESETS.rect }
   return {
@@ -71,6 +106,7 @@ function initialScene(): Scene {
       { id: nextId('fx'), kind: 'door', wall: 'west', t: room.depth / 2 },
     ],
     items: [],
+    surfaces: defaultSurfaces(),
     lighting: 'afternoon',
     budget: DEFAULT_BUDGET,
   }
@@ -79,7 +115,8 @@ function initialScene(): Scene {
 /** Same content, compared cheaply. Only used until a drag has recorded. */
 function sameScene(a: Scene, b: Scene): boolean {
   return (
-    JSON.stringify([a.room, a.items, a.fixtures]) === JSON.stringify([b.room, b.items, b.fixtures])
+    JSON.stringify([a.room, a.items, a.fixtures, a.surfaces]) ===
+    JSON.stringify([b.room, b.items, b.fixtures, b.surfaces])
   )
 }
 
@@ -88,6 +125,7 @@ function cloneScene(scene: Scene): Scene {
     room: { ...scene.room },
     fixtures: scene.fixtures.map((f) => ({ ...f })),
     items: scene.items.map((i) => ({ ...i })),
+    surfaces: { ...scene.surfaces, wallOverrides: { ...scene.surfaces.wallOverrides } },
     lighting: scene.lighting,
     budget: scene.budget,
   }
@@ -133,6 +171,16 @@ export interface BuilderState {
   setItemMaterial: (id: string, material: MaterialKey) => void
   cycleItemMaterial: (id: string) => void
   duplicateSelected: () => void
+  /** Stretches or shrinks a piece; clamped around its catalogue size. */
+  resizeItem: (id: string, patch: Partial<ItemSize>, record?: boolean) => void
+  resetItemSize: (id: string) => void
+
+  /** Paints every wall, clearing nothing: accent walls keep their own colour. */
+  setWallPaint: (hex: string) => void
+  /** Paints one wall; `null` hands it back to the room colour. */
+  setWallOverride: (wall: WallId, hex: string | null) => void
+  setFloor: (floor: FloorKey) => void
+  setCeilingPaint: (hex: string) => void
 
   addFixture: (kind: FixtureKind, at?: Vec2) => string
   moveFixtureTo: (id: string, at: Vec2) => void
@@ -391,6 +439,52 @@ export const useBuilder = create<BuilderState>()(
           set({ selection: { kind: 'item', id } })
         },
 
+        resizeItem: (id, patch, rec = true) =>
+          mutate((scene) => ({
+            ...scene,
+            items: scene.items.map((item) => {
+              if (item.id !== id) return item
+              const size = clampSize(item.catalogId, { ...sizeOf(item), ...patch })
+              // A bigger footprint may now poke through a wall: pull it back in.
+              return place({ ...item, size }, scene.room, false)
+            }),
+          }), rec),
+
+        resetItemSize: (id) =>
+          mutate((scene) => ({
+            ...scene,
+            items: scene.items.map((item) => {
+              if (item.id !== id || !item.size) return item
+              const { size: _dropped, ...rest } = item
+              return place(rest, scene.room, false)
+            }),
+          })),
+
+        setWallPaint: (hex) => {
+          if (!HEX.test(hex) || get().scene.surfaces.wall === hex) return
+          mutate((scene) => ({ ...scene, surfaces: { ...scene.surfaces, wall: hex } }))
+        },
+
+        setWallOverride: (wall, hex) => {
+          if (hex !== null && !HEX.test(hex)) return
+          mutate((scene) => {
+            const wallOverrides = { ...scene.surfaces.wallOverrides }
+            if (hex === null) delete wallOverrides[wall]
+            else wallOverrides[wall] = hex
+            return { ...scene, surfaces: { ...scene.surfaces, wallOverrides } }
+          })
+        },
+
+        setFloor: (floor) => {
+          if (get().scene.surfaces.floor === floor) return
+          mutate((scene) => ({ ...scene, surfaces: { ...scene.surfaces, floor } }))
+        },
+
+        setCeilingPaint: (hex) => {
+          if (!HEX.test(hex) || get().scene.surfaces.ceiling === hex) return
+          mutate((scene) => ({ ...scene, surfaces: { ...scene.surfaces, ceiling: hex } }))
+        },
+
         addFixture: (kind, at) => {
           const { scene } = get()
           const walls = buildWalls(scene.room)
@@ -560,7 +654,7 @@ export const useBuilder = create<BuilderState>()(
         const stored = (persisted as Partial<PersistedBuilder> | undefined)?.scene
         return {
           ...current,
-          scene: isScene(stored) ? stored : initialScene(),
+          scene: isScene(stored) ? upgradeScene(stored) : initialScene(),
           past: [],
           future: [],
           selection: null,
@@ -573,6 +667,11 @@ export const useBuilder = create<BuilderState>()(
     }
   )
 )
+
+// Dev only: lets a console or a browser test drive the editor directly.
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  ;(window as unknown as { __fsBuilder?: typeof useBuilder }).__fsBuilder = useBuilder
+}
 
 /* ------------------------------------------------------------- persistence */
 
@@ -666,6 +765,7 @@ function createSafeStorage<S>(): PersistStorage<S> {
  */
 function place(item: Item, room: Room, magnet: boolean): Item {
   const entry = entryFor(item.catalogId)
+  const size = sizeOf(item)
   const walls = buildWalls(room)
   let { x, z, rotation } = item
 
@@ -675,16 +775,16 @@ function place(item: Item, room: Room, magnet: boolean): Item {
       const wall = hit.wall
       // Face the inward normal: the back of the piece ends up on the wall.
       rotation = Math.atan2(-wall.nx, -wall.nz)
-      const t = clamp(hit.t, entry.w / 2, Math.max(entry.w / 2, wall.length - entry.w / 2))
+      const t = clamp(hit.t, size.w / 2, Math.max(size.w / 2, wall.length - size.w / 2))
       const on = wallPoint(wall, t)
-      const back = entry.d / 2 + 0.01
+      const back = size.d / 2 + 0.01
       x = on.x - wall.nx * back
       z = on.z - wall.nz * back
     }
   }
 
   // The whole footprint stays inside the room and out of the L notch.
-  const inside = containPoint(x, z, entry, rotation, room)
+  const inside = containPoint(x, z, size, rotation, room)
   return { ...item, rotation, x: inside.x, z: inside.z }
 }
 
@@ -692,17 +792,33 @@ function place(item: Item, room: Room, magnet: boolean): Item {
  * Nearest spot to `item` where it overlaps nothing, searched on a widening
  * ring of grid points. Falls back to where it was if the room is full.
  */
+const FREE_GAP = 0.06
+
 function freeSpot(item: Item, scene: Scene): Item {
   const entry = entryFor(item.catalogId)
   if (entry.kind === 'rug') return item
   const others = scene.items
     .filter((other) => other.id !== item.id && entryFor(other.catalogId).kind !== 'rug')
-    .map((other) => itemBox(other, entryFor(other.catalogId)))
+    .map((other) => itemBox(other, sizeOf(other)))
+  const size = sizeOf(item)
+  // A NEGATIVE slack: the new piece must stand clear of its neighbours by a
+  // few centimetres. The old positive value let it land 4 cm inside one, which
+  // the collision check (2 cm) then flagged the moment the piece appeared.
   const clear = (candidate: Item) =>
-    !others.some((box) => boxesOverlap(itemBox(candidate, entry), box, 0.04))
+    !others.some((box) => boxesOverlap(itemBox(candidate, size), box, -FREE_GAP))
   if (clear(item)) return item
+  // As it stands first; then turned a quarter — a bed that will not fit
+  // across the last free strip of floor usually fits along it.
+  for (const turned of [item, { ...item, rotation: item.rotation + Math.PI / 2 }]) {
+    const found = searchRings(turned, scene.room, clear)
+    if (found) return found
+  }
+  return item
+}
+
+function searchRings(item: Item, room: Room, clear: (candidate: Item) => boolean): Item | null {
   const step = 0.2
-  for (let ring = 1; ring <= 30; ring += 1) {
+  for (let ring = 0; ring <= 30; ring += 1) {
     for (let i = -ring; i <= ring; i += 1) {
       for (const [dx, dz] of [
         [i, -ring],
@@ -710,16 +826,12 @@ function freeSpot(item: Item, scene: Scene): Item {
         [-ring, i],
         [ring, i],
       ]) {
-        const moved = place(
-          { ...item, x: item.x + dx * step, z: item.z + dz * step },
-          scene.room,
-          false
-        )
+        const moved = place({ ...item, x: item.x + dx * step, z: item.z + dz * step }, room, false)
         if (clear(moved)) return moved
       }
     }
   }
-  return item
+  return null
 }
 
 /** After the room changes shape, pull everything back inside it. */
@@ -739,7 +851,7 @@ export function findCollisions(items: Item[]): Set<string> {
   const hits = new Set<string>()
   const boxes = items.map((item) => {
     const entry = entryFor(item.catalogId)
-    return { item, entry, box: itemBox(item, entry) }
+    return { item, entry, box: itemBox(item, sizeOf(item)) }
   })
   for (let i = 0; i < boxes.length; i += 1) {
     for (let j = i + 1; j < boxes.length; j += 1) {

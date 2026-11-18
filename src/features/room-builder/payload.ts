@@ -5,7 +5,7 @@
  * drawn room in metres and the placed catalogue pieces, so the server can write
  * a design brief and renders without any photographs.
  */
-import { CATALOG, entryFor } from './catalog'
+import { CATALOG, entryFor, sizeOf } from './catalog'
 import {
   buildWalls,
   footprint,
@@ -61,6 +61,13 @@ export interface ScenePayload {
     material: string
     unitPriceUzs: number
   }>
+  /** Wall paint (hex, with per-wall accents), floor covering and ceiling colour. */
+  surfaces: {
+    wallColor: string
+    accentWalls: Array<{ wall: string; color: string }>
+    floor: string
+    ceilingColor: string
+  }
   lighting: { preset: Scene['lighting'] }
   budget: { currency: 'UZS'; limit: number; estimatedTotal: number; withinBudget: boolean }
   notes: string
@@ -112,13 +119,14 @@ export function buildScenePayload(scene: Scene, locale: string, style: string): 
     })),
     items: scene.items.map((item) => {
       const entry = entryFor(item.catalogId)
+      const size = sizeOf(item)
       return {
         id: item.id,
         catalogId: entry.id,
         category: entry.apiCategory,
-        widthM: entry.w,
-        depthM: entry.d,
-        heightM: entry.h,
+        widthM: size.w,
+        depthM: size.d,
+        heightM: size.h,
         x: tidy(item.x),
         z: tidy(item.z),
         rotationDeg: Math.round(((item.rotation * 180) / Math.PI + 360) % 360),
@@ -126,6 +134,14 @@ export function buildScenePayload(scene: Scene, locale: string, style: string): 
         unitPriceUzs: entry.price,
       }
     }),
+    surfaces: {
+      wallColor: scene.surfaces.wall,
+      accentWalls: Object.entries(scene.surfaces.wallOverrides)
+        .filter(([wall]) => walls.some((w) => w.id === wall))
+        .map(([wall, color]) => ({ wall, color: color as string })),
+      floor: scene.surfaces.floor,
+      ceilingColor: scene.surfaces.ceiling,
+    },
     lighting: { preset: scene.lighting },
     budget: {
       currency: 'UZS',

@@ -9,7 +9,7 @@
  * Labels are NOT here: they live in src/i18n/sections/builder.ts under
  * `builder.catalog.<id>`, because the catalogue is data and data is not copy.
  */
-import type { MaterialKey } from './types'
+import type { FloorKey, Item, ItemSize, MaterialKey } from './types'
 
 export type CatalogGroup = 'seating' | 'tables' | 'storage' | 'sleep' | 'soft' | 'lighting'
 
@@ -28,6 +28,10 @@ export type PieceKind =
   | 'rug'
   | 'floorLamp'
   | 'plant'
+  | 'tvStand'
+  | 'sideTable'
+  | 'pouf'
+  | 'nightstand'
 
 export interface CatalogEntry {
   id: string
@@ -46,6 +50,16 @@ export interface CatalogEntry {
   legs: 0 | 4
   /** Carries a lamp in the "lamps only" lighting preset. */
   emits?: boolean
+  /**
+   * A scanned/modelled .glb that replaces the code-built body on capable
+   * devices (see src/three/builder/models.ts). The code-built body stays as
+   * the loading state and as the whole story on low-tier GPUs.
+   */
+  model?: string
+  /** False when the piece's look is baked into its model and cannot be re-coloured. */
+  tintable?: boolean
+  /** Variant handed to the code-built body (plant species, seat count…). */
+  variant?: string
   /** The closed `furniture.category` enum the render API already speaks. */
   apiCategory:
     | 'seating'
@@ -64,9 +78,10 @@ export const CATALOG: CatalogEntry[] = [
     id: 'sofa3',
     kind: 'sofa',
     group: 'seating',
-    w: 2.1,
-    d: 0.9,
-    h: 0.82,
+    w: 2.2,
+    d: 1.0,
+    h: 0.8,
+    model: 'sofa-velvet',
     price: 5_900_000,
     hugsWall: true,
     material: 'linen',
@@ -78,8 +93,9 @@ export const CATALOG: CatalogEntry[] = [
     kind: 'armchair',
     group: 'seating',
     w: 0.82,
-    d: 0.86,
-    h: 0.78,
+    d: 0.62,
+    h: 0.72,
+    model: 'accent-chair',
     price: 2_400_000,
     hugsWall: false,
     material: 'clay',
@@ -207,13 +223,135 @@ export const CATALOG: CatalogEntry[] = [
     id: 'plant',
     kind: 'plant',
     group: 'soft',
-    w: 0.6,
-    d: 0.6,
-    h: 1.1,
+    w: 0.7,
+    d: 0.66,
+    h: 0.85,
+    model: 'plant-pot',
+    tintable: false,
     price: 420_000,
     hugsWall: false,
     material: 'olive',
     legs: 0,
+    apiCategory: 'plants',
+  },
+  {
+    id: 'sofa2',
+    kind: 'sofa',
+    group: 'seating',
+    w: 1.6,
+    d: 0.9,
+    h: 0.82,
+    price: 4_300_000,
+    hugsWall: true,
+    material: 'sand',
+    legs: 4,
+    apiCategory: 'seating',
+  },
+  {
+    id: 'sofaClassic',
+    kind: 'sofa',
+    group: 'seating',
+    w: 2.7,
+    d: 0.92,
+    h: 1.1,
+    price: 11_500_000,
+    hugsWall: true,
+    material: 'walnut',
+    legs: 4,
+    model: 'sofa-classic',
+    tintable: false,
+    apiCategory: 'seating',
+  },
+  {
+    id: 'pouf',
+    kind: 'pouf',
+    group: 'seating',
+    w: 0.55,
+    d: 0.55,
+    h: 0.4,
+    price: 540_000,
+    hugsWall: false,
+    material: 'terracotta',
+    legs: 0,
+    apiCategory: 'seating',
+  },
+  {
+    id: 'sideTable',
+    kind: 'sideTable',
+    group: 'tables',
+    w: 0.5,
+    d: 0.5,
+    h: 0.52,
+    price: 620_000,
+    hugsWall: false,
+    material: 'walnut',
+    legs: 0,
+    apiCategory: 'table',
+  },
+  {
+    id: 'tvStand',
+    kind: 'tvStand',
+    group: 'storage',
+    w: 1.6,
+    d: 0.42,
+    h: 1.2,
+    price: 2_900_000,
+    hugsWall: true,
+    material: 'oak',
+    legs: 4,
+    apiCategory: 'storage',
+  },
+  {
+    id: 'nightstand',
+    kind: 'nightstand',
+    group: 'sleep',
+    w: 0.48,
+    d: 0.4,
+    h: 0.52,
+    price: 780_000,
+    hugsWall: true,
+    material: 'oak',
+    legs: 4,
+    apiCategory: 'storage',
+  },
+  {
+    id: 'bedSingle',
+    kind: 'bed',
+    group: 'sleep',
+    w: 0.95,
+    d: 2.0,
+    h: 0.5,
+    price: 3_900_000,
+    hugsWall: true,
+    material: 'sand',
+    legs: 0,
+    apiCategory: 'bed',
+  },
+  {
+    id: 'rugRunner',
+    kind: 'rug',
+    group: 'soft',
+    w: 0.8,
+    d: 2.4,
+    h: 0.02,
+    price: 950_000,
+    hugsWall: false,
+    material: 'clay',
+    legs: 0,
+    apiCategory: 'rug',
+  },
+  {
+    id: 'palm',
+    kind: 'plant',
+    group: 'soft',
+    w: 0.6,
+    d: 0.6,
+    h: 1.5,
+    price: 560_000,
+    hugsWall: false,
+    material: 'olive',
+    legs: 0,
+    variant: 'palm',
     apiCategory: 'plants',
   },
   {
@@ -270,6 +408,80 @@ export const MATERIAL_HEX: Record<MaterialKey, string> = {
   clay: '#a67b5b',
   olive: '#6e7f63',
   terracotta: '#c6552f',
+}
+
+/* ------------------------------------------------------------------ sizes */
+
+/** How far a piece may be stretched or shrunk from its catalogue size. */
+export const SIZE_RANGE = { min: 0.6, max: 1.6 } as const
+
+/** The dimensions a placed piece actually has: its own if resized, else the catalogue's. */
+export function sizeOf(item: Pick<Item, 'catalogId' | 'size'>): ItemSize {
+  if (item.size) return item.size
+  const entry = entryFor(item.catalogId)
+  return { w: entry.w, d: entry.d, h: entry.h }
+}
+
+/** Clamps a requested size to a sane range around the catalogue's, at 1 cm. */
+export function clampSize(catalogId: string, size: ItemSize): ItemSize {
+  const entry = entryFor(catalogId)
+  const fit = (value: number, base: number) => {
+    const min = Math.max(0.02, base * SIZE_RANGE.min)
+    const max = base * SIZE_RANGE.max
+    const v = Number.isFinite(value) ? value : base
+    return Math.round(Math.min(max, Math.max(min, v)) * 100) / 100
+  }
+  return { w: fit(size.w, entry.w), d: fit(size.d, entry.d), h: fit(size.h, entry.h) }
+}
+
+/** True when the piece is still at its catalogue size. */
+export function isStockSize(item: Pick<Item, 'catalogId' | 'size'>): boolean {
+  if (!item.size) return true
+  const entry = entryFor(item.catalogId)
+  return item.size.w === entry.w && item.size.d === entry.d && item.size.h === entry.h
+}
+
+/* --------------------------------------------------------------- surfaces */
+
+/** Wall paints offered as swatches. Any hex is valid; these are the presets. */
+export const WALL_PAINTS: Array<{ id: string; hex: string }> = [
+  { id: 'chalk', hex: '#f4efe6' },
+  { id: 'white', hex: '#fbfaf7' },
+  { id: 'linen', hex: '#e9e0d1' },
+  { id: 'greige', hex: '#d3c8b8' },
+  { id: 'sage', hex: '#b9c2ad' },
+  { id: 'mist', hex: '#c5d0d6' },
+  { id: 'blush', hex: '#e4c9bd' },
+  { id: 'ochre', hex: '#d9b06a' },
+  { id: 'terracotta', hex: '#bd6a4a' },
+  { id: 'forest', hex: '#48604f' },
+  { id: 'navy', hex: '#2f3e52' },
+  { id: 'charcoal', hex: '#3b3836' },
+]
+
+export const CEILING_PAINTS: Array<{ id: string; hex: string }> = [
+  { id: 'white', hex: '#fbfaf7' },
+  { id: 'chalk', hex: '#f4efe6' },
+  { id: 'linen', hex: '#e9e0d1' },
+  { id: 'charcoal', hex: '#3b3836' },
+]
+
+/** Swatch colour per floor covering (the 3D texture is drawn in src/three/materials/floors.ts). */
+export const FLOORS: Array<{ id: FloorKey; hex: string }> = [
+  { id: 'oak', hex: '#c8a47a' },
+  { id: 'ash', hex: '#dcc9ac' },
+  { id: 'walnut', hex: '#6f4d36' },
+  { id: 'herringbone', hex: '#b98f63' },
+  { id: 'tile', hex: '#d9d4cb' },
+  { id: 'concrete', hex: '#a9a6a0' },
+  { id: 'carpet', hex: '#b9ae9f' },
+]
+
+export const DEFAULT_SURFACES = {
+  wall: '#f4efe6',
+  wallOverrides: {},
+  floor: 'oak' as FloorKey,
+  ceiling: '#fbfaf7',
 }
 
 /** A finish surcharge would be a lie without a supplier, so it is flat. */

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
@@ -17,6 +17,10 @@ import { useSceneReducedMotion } from '../Canvas'
  */
 
 const FOV = 38
+/** Standing inside a room needs a wider lens, or all you see is one wall. */
+const WALK_FOV = 64
+/** Eye height of someone standing in the room. */
+const EYE = 1.55
 const TRANSITION_MS = 820
 
 interface Pose {
@@ -26,6 +30,8 @@ interface Pose {
 
 /** Minimal shape of drei's OrbitControls as this rig drives it. */
 interface ControlsLike {
+  /** The camera this instance drives. */
+  object?: THREE.Camera
   target: THREE.Vector3
   enabled: boolean
   update: () => void
@@ -33,7 +39,7 @@ interface ControlsLike {
   removeEventListener: (type: 'change', listener: () => void) => void
 }
 
-function poseFor(view: ViewMode, room: Room): Pose {
+function poseFor(view: ViewMode, room: Room, aspect = 1.5): Pose {
   const cx = room.width / 2
   const cz = room.depth / 2
   const span = Math.max(room.width, room.depth)
@@ -48,14 +54,26 @@ function poseFor(view: ViewMode, room: Room): Pose {
     }
   }
 
-  return {
-    position: new THREE.Vector3(
-      cx + room.width * 0.62,
-      room.height * 1.45,
-      cz + room.depth * 0.95 + 1.2
-    ),
-    target: new THREE.Vector3(cx, room.height * 0.34, cz),
+  if (view === 'walk') {
+    // South-west corner, looking across the diagonal: the longest sight line a
+    // room has, and the one corner every shape keeps (the L's bite is south-east).
+    const eye = Math.min(EYE, room.height - 0.5)
+    return {
+      position: new THREE.Vector3(room.width * 0.16, eye, room.depth * 0.88),
+      target: new THREE.Vector3(room.width * 0.62, eye * 0.72, room.depth * 0.3),
+    }
   }
+
+  // Back the camera off far enough that the whole room fits whatever the
+  // viewport's shape. A fixed offset cropped the walls on a tall or narrow
+  // canvas, which read as the camera sitting inside the room.
+  const vFov = (FOV * Math.PI) / 180
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect)
+  const radius = 0.5 * Math.hypot(room.width, room.depth, room.height)
+  const distance = (radius / Math.sin(Math.min(vFov, hFov) / 2)) * 0.98
+  const target = new THREE.Vector3(cx, room.height * 0.36, cz)
+  const direction = new THREE.Vector3(0.52, 0.58, 0.78).normalize()
+  return { position: target.clone().addScaledVector(direction, distance), target }
 }
 
 export function CameraRig() {
@@ -64,25 +82,42 @@ export function CameraRig() {
   const drag = useBuilder((s) => s.drag)
   const reduced = useSceneReducedMotion()
   const { camera } = useThree()
+  const aspect = useThree((state) => state.size.width / Math.max(1, state.size.height))
   const invalidate = useThree((state) => state.invalidate)
   const controls = useThree((state) => state.controls) as unknown as ControlsLike | null
 
   const anim = useRef({ t: 1, from: null as Pose | null, to: null as Pose | null })
   const placed = useRef(false)
+  const placedFor = useRef<ControlsLike | null>(null)
 
-  const pose = useMemo(() => poseFor(view, room), [view, room])
+  const aspectRef = useRef(aspect)
+  aspectRef.current = aspect
 
   // Place the camera the moment the controls exist, so the first frame is
   // already framed on the room instead of flying in from the world origin.
   useEffect(() => {
-    if (placed.current || !controls) return
+    if (!controls || placedFor.current === controls) return
+    // drei builds one OrbitControls per camera. `makeDefault` on the camera
+    // below swaps the canvas camera a tick after mount, which replaces the
+    // controls too — so the instance that exists first is bound to the camera
+    // that is about to be thrown away. Placing against that one (as this did)
+    // left the real controls aimed at the world origin: the editor opened
+    // looking at the room's north-west corner at a slant instead of at the
+    // plan. Wait for the pair that will actually be used, and re-place if the
+    // controls are ever rebuilt.
+    if (controls.object && controls.object !== camera) return
+    placedFor.current = controls
     placed.current = true
     const state = useBuilder.getState()
-    const start = poseFor(state.view, state.scene.room)
+    const start = poseFor(state.view, state.scene.room, aspectRef.current)
     camera.position.copy(start.position)
     controls.target.copy(start.target)
     controls.update()
-  }, [controls, camera])
+    // The canvas renders on demand and the `change` listener below is not
+    // attached yet, so without this the first frame — drawn from wherever the
+    // camera was born — stays on screen until something else asks for one.
+    invalidate()
+  }, [controls, camera, invalidate])
 
   // The canvas renders on demand: every orbit, pan, zoom and damping step asks
   // for its own frame, and an untouched camera costs nothing.
@@ -96,7 +131,7 @@ export function CameraRig() {
   // View switches animate; everything else leaves the camera where the user put it.
   useEffect(() => {
     if (!placed.current) return
-    const to = poseFor(view, useBuilder.getState().scene.room)
+    const to = poseFor(view, useBuilder.getState().scene.room, aspectRef.current)
     if (reduced) {
       camera.position.copy(to.position)
       if (controls) {
@@ -124,6 +159,17 @@ export function CameraRig() {
     // Demand-rendered: the first frame after an idle spell reports the whole
     // idle time as its delta, which would skip the transition outright.
     const delta = Math.min(rawDelta, 1 / 30)
+
+    // The lens eases with the view: 38° to study the plan, 64° to stand in it.
+    const lens = camera as THREE.PerspectiveCamera
+    const wantFov = view === 'walk' ? WALK_FOV : FOV
+    if (lens.isPerspectiveCamera && Math.abs(lens.fov - wantFov) > 0.02) {
+      lens.fov = reduced ? wantFov : lens.fov + (wantFov - lens.fov) * Math.min(1, delta * 5)
+      if (Math.abs(lens.fov - wantFov) <= 0.02) lens.fov = wantFov
+      lens.updateProjectionMatrix()
+      invalidate()
+    }
+
     const a = anim.current
     if (a.t < 1 && a.from && a.to) {
       a.t = Math.min(1, a.t + (delta * 1000) / TRANSITION_MS)
@@ -139,16 +185,38 @@ export function CameraRig() {
       return
     }
 
-    // While a wall is being dragged the plan must stay framed, or the room
-    // grows straight out of shot. Damped, so it reads as the camera easing back.
-    if (view === 'plan' && drag?.kind === 'wall' && controls) {
-      const k = reduced ? 1 : Math.min(1, delta * 4)
-      camera.position.lerp(pose.position, k)
-      controls.target.lerp(pose.target, k)
-      controls.update()
-      if (camera.position.distanceToSquared(pose.position) > 1e-6) invalidate()
-    }
   })
+
+  // A wall drag re-frames the plan when the wall is let go — never during the
+  // drag. Re-framing live moved the floor under a still pointer: the camera
+  // pulled back, the same pixel now meant a point further out, the wall
+  // followed it, and the room grew nearly three metres for one metre of drag.
+  const wasWallDrag = useRef(false)
+  useEffect(() => {
+    const isWallDrag = drag?.kind === 'wall'
+    const released = wasWallDrag.current && !isWallDrag
+    wasWallDrag.current = isWallDrag
+    if (!released || view !== 'plan') return
+    const to = poseFor('plan', useBuilder.getState().scene.room, aspectRef.current)
+    if (reduced) {
+      camera.position.copy(to.position)
+      if (controls) {
+        controls.target.copy(to.target)
+        controls.update()
+      }
+    } else {
+      anim.current = {
+        t: 0,
+        from: {
+          position: camera.position.clone(),
+          target: controls ? controls.target.clone() : to.target.clone(),
+        },
+        to,
+      }
+    }
+    invalidate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag])
 
   // The pointer is busy pushing geometry around; orbiting at the same time turns
   // a drag into a camera swing.
@@ -171,11 +239,13 @@ export function CameraRig() {
         zoomSpeed={0.7}
         // Rotation is off in plan rather than clamped: a polar clamp would fight
         // the transition and snap the camera overhead the moment it started.
-        enableRotate={view === 'perspective'}
-        minDistance={1.5}
+        enableRotate={view !== 'plan'}
+        // Inside the room the camera has to be able to stand close to things
+        // and tip up toward the ceiling; from outside neither makes sense.
+        minDistance={view === 'walk' ? 0.3 : 1.5}
         maxDistance={40}
         minPolarAngle={0}
-        maxPolarAngle={1.52}
+        maxPolarAngle={view === 'walk' ? 1.95 : 1.52}
       />
     </>
   )

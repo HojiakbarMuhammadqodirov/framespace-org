@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 
 import { GRID, WALL_T, footprint } from '@/features/room-builder/geometry'
 import { useBuilder } from '@/features/room-builder/store'
 import type { Wall, WallId } from '@/features/room-builder/types'
 import { DRAG_THRESHOLD_PX, armDrag } from './dragIntent'
 import { useKit } from './kit'
+import { applyFloor } from '../materials/floors'
 
 /**
  * Floor, walls and the setting-out grid.
@@ -29,9 +30,65 @@ function useDisposable<T extends THREE.BufferGeometry>(geometry: T): T {
   return geometry
 }
 
-function FloorPlate() {
-  const { mats } = useKit()
+/** Floor outline as a flat shape; shared by the floor and the ceiling. */
+function useFootprintGeometry() {
   const room = useBuilder((s) => s.scene.room)
+  return useDisposable(
+    useMemo(() => {
+      const poly = footprint(room)
+      const shape = new THREE.Shape()
+      poly.forEach((p, i) => (i === 0 ? shape.moveTo(p.x, -p.z) : shape.lineTo(p.x, -p.z)))
+      shape.closePath()
+      return new THREE.ShapeGeometry(shape)
+    }, [room])
+  )
+}
+
+/**
+ * The lid. It exists only while the camera is below it: from above (plan, or
+ * an orbit looking down) it would hide the room, from inside it is what makes
+ * the space read as a room rather than a stage set.
+ */
+function Ceiling() {
+  const { mats } = useKit()
+  const height = useBuilder((s) => s.scene.room.height)
+  const paint = useBuilder((s) => s.scene.surfaces.ceiling)
+  const geometry = useFootprintGeometry()
+  const mesh = useRef<THREE.Mesh>(null)
+  const invalidate = useThree((state) => state.invalidate)
+
+  useEffect(() => {
+    mats.ceiling.color.set(paint)
+    invalidate()
+  }, [mats, paint, invalidate])
+
+  useFrame(({ camera }) => {
+    if (mesh.current) mesh.current.visible = camera.position.y < height - 0.02
+  })
+
+  return (
+    <mesh
+      ref={mesh}
+      geometry={geometry}
+      material={mats.ceiling}
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[0, height, 0]}
+      receiveShadow
+    />
+  )
+}
+
+function FloorPlate() {
+  const { mats, tier } = useKit()
+  const room = useBuilder((s) => s.scene.room)
+  const covering = useBuilder((s) => s.scene.surfaces.floor)
+  const invalidate = useThree((state) => state.invalidate)
+
+  // Same material, new maps: changing the floor never recompiles a shader.
+  useEffect(() => {
+    applyFloor(mats.floor, covering, tier)
+    invalidate()
+  }, [mats, covering, tier, invalidate])
 
   const geometry = useDisposable(
     useMemo(() => {
@@ -93,6 +150,9 @@ function SettingOutGrid() {
 
   return (
     <lineSegments
+      // Grid lines would otherwise be "hit" from up to a metre away and stand
+      // between a tap and the floor, so tapping empty floor failed to deselect.
+      raycast={() => null}
       geometry={geometry}
       material={material}
       position={[0, 0.006, 0]}
@@ -104,12 +164,18 @@ function SettingOutGrid() {
 /** Half-width of the plan-view grab strip: 0.6 m in all, a fingertip at any zoom. */
 const STRIP = 0.6
 
+/** Skirting board: 8 cm of painted timber where the wall meets the floor. */
+const SKIRT_H = 0.08
+const SKIRT_T = 0.014
+
 function WallBox({
   wall,
+  paint,
   register,
 }: {
   wall: Wall
-  register: (id: WallId, mesh: THREE.Mesh | null) => void
+  paint: THREE.Material
+  register: (id: string, mesh: THREE.Mesh | null) => void
 }) {
   const { geo, mats } = useKit()
   const view = useBuilder((s) => s.view)
@@ -153,7 +219,7 @@ function WallBox({
           register(wall.id, mesh)
         }}
         geometry={geo.box}
-        material={selected && view === 'plan' ? mats.handle : mats.wall}
+        material={selected && view === 'plan' ? mats.handle : paint}
         position={centre}
         rotation={[0, wall.angle, 0]}
         scale={[wall.length, height, WALL_T]}
@@ -163,6 +229,23 @@ function WallBox({
         onPointerOver={grabbable ? () => void (document.body.style.cursor = cursor) : undefined}
         onPointerOut={grabbable ? () => void (document.body.style.cursor = '') : undefined}
       />
+      {/* Follows its wall's visibility (see RoomShell's frame pass) by being
+          registered under the same id with a `skirt` flag. */}
+      {view !== 'plan' && (
+        <mesh
+          ref={(mesh) => register(`${wall.id}:skirt`, mesh)}
+          geometry={geo.box}
+          material={mats.skirting}
+          position={[
+            wall.mid.x - (wall.nx * SKIRT_T) / 2,
+            SKIRT_H / 2,
+            wall.mid.z - (wall.nz * SKIRT_T) / 2,
+          ]}
+          rotation={[0, wall.angle, 0]}
+          scale={[wall.length, SKIRT_H, SKIRT_T]}
+          receiveShadow
+        />
+      )}
       {grabbable && (
         <>
           {/* Invisible grab strip from the inner face outward, so a thumb does
@@ -198,8 +281,8 @@ function WallBox({
 }
 
 export function RoomShell({ walls }: { walls: Wall[] }) {
-  const meshes = useRef(new Map<WallId, THREE.Mesh>())
-  const register = useCallback((id: WallId, mesh: THREE.Mesh | null) => {
+  const meshes = useRef(new Map<string, THREE.Mesh>())
+  const register = useCallback((id: string, mesh: THREE.Mesh | null) => {
     if (mesh) meshes.current.set(id, mesh)
     else meshes.current.delete(id)
   }, [])
@@ -219,15 +302,55 @@ export function RoomShell({ walls }: { walls: Wall[] }) {
       const outside =
         (camera.position.x - wall.mid.x) * wall.nx + (camera.position.z - wall.mid.z) * wall.nz
       mesh.visible = outside < 0.05
+      const skirt = meshes.current.get(`${wall.id}:skirt`)
+      if (skirt) skirt.visible = mesh.visible
     }
   })
+
+  // One material per paint colour in use, not per wall: four walls in the room
+  // colour share a single material, an accent wall adds exactly one more.
+  const surfaces = useBuilder((s) => s.scene.surfaces)
+  const invalidate = useThree((state) => state.invalidate)
+  const paints = useRef(new Map<string, THREE.MeshStandardMaterial>())
+  const paintFor = (hex: string) => {
+    let material = paints.current.get(hex)
+    if (!material) {
+      material = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.96 })
+      paints.current.set(hex, material)
+    }
+    return material
+  }
+  useEffect(() => {
+    // Drop paints no wall wears any more (a colour picker drag makes dozens).
+    const inUse = new Set<string>([surfaces.wall, ...Object.values(surfaces.wallOverrides)])
+    for (const [hex, material] of paints.current) {
+      if (!inUse.has(hex)) {
+        material.dispose()
+        paints.current.delete(hex)
+      }
+    }
+    invalidate()
+  }, [surfaces, invalidate])
+  useEffect(() => {
+    const store = paints.current
+    return () => {
+      store.forEach((material) => material.dispose())
+      store.clear()
+    }
+  }, [])
 
   return (
     <group>
       <FloorPlate />
+      <Ceiling />
       <SettingOutGrid />
       {walls.map((wall) => (
-        <WallBox key={wall.id} wall={wall} register={register} />
+        <WallBox
+          key={wall.id}
+          wall={wall}
+          paint={paintFor(surfaces.wallOverrides[wall.id] ?? surfaces.wall)}
+          register={register}
+        />
       ))}
     </group>
   )

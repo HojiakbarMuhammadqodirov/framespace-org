@@ -44,10 +44,36 @@ export function probeWebGL(): WebGLProbe {
   return probed
 }
 
+/**
+ * A manual override, for the person whose laptop is mis-detected and for
+ * testing either path on one machine: `?tier=high` (or `low`) on any URL, or
+ * `localStorage['framespace.sceneTier']`. The query form is remembered.
+ */
+function tierOverride(): SceneTier | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const fromUrl = new URLSearchParams(window.location.search).get('tier')
+    if (fromUrl === 'high' || fromUrl === 'low') {
+      window.localStorage.setItem('framespace.sceneTier', fromUrl)
+      return fromUrl
+    }
+    if (fromUrl === 'auto') window.localStorage.removeItem('framespace.sceneTier')
+    const stored = window.localStorage.getItem('framespace.sceneTier')
+    return stored === 'high' || stored === 'low' ? stored : null
+  } catch {
+    return null
+  }
+}
+
 export function detectSceneTier(): SceneTier {
   if (cached) return cached
   if (typeof navigator === 'undefined') {
     cached = 'high'
+    return cached
+  }
+  const forced = tierOverride()
+  if (forced) {
+    cached = forced
     return cached
   }
 

@@ -1,10 +1,10 @@
-import { Fragment, useMemo } from 'react'
+import { Fragment, useEffect, useMemo } from 'react'
 import { Instance, Instances } from '@react-three/drei'
-import type { ThreeEvent } from '@react-three/fiber'
+import { useThree, type ThreeEvent } from '@react-three/fiber'
 
 import { FIXTURE_SIZE, findWall, wallPoint } from '@/features/room-builder/geometry'
 import { useBuilder } from '@/features/room-builder/store'
-import type { Fixture, Wall } from '@/features/room-builder/types'
+import type { Fixture, LightingPreset, Wall } from '@/features/room-builder/types'
 import { armDrag } from './dragIntent'
 import { useKit } from './kit'
 
@@ -68,6 +68,8 @@ function Outline({ p }: { p: Placed }) {
   const { geo, mats } = useKit()
   return (
     <lineSegments
+      // Not a pointer target: see the note on the furniture outline.
+      raycast={() => null}
       geometry={geo.edges}
       material={mats.select}
       position={[p.x, p.y, p.z]}
@@ -77,30 +79,60 @@ function Outline({ p }: { p: Placed }) {
   )
 }
 
+/** What the sky outside looks like per lighting preset; multiplies the view. */
+const SKY_TINT: Record<LightingPreset, string> = {
+  morning: '#fff1dc',
+  afternoon: '#ffffff',
+  evening: '#f2a56f',
+  lamps: '#1d2740',
+}
+
 function WindowUnit({ p }: { p: Placed }) {
   const { geo, mats } = useKit()
-  const frame = 0.07
+  const frame = 0.06
+  const bar = 0.035
   return (
     <group position={[p.x, p.y, p.z]} rotation={[0, p.wall.angle, 0]} onPointerDown={onGrab(p.fixture.id)}>
-      <mesh geometry={geo.box} material={mats.trim} scale={[p.w + frame * 2, p.h + frame * 2, 0.06]} />
-      <mesh geometry={geo.plane} material={mats.glass} position={[0, 0, 0.035]} scale={[p.w, p.h, 1]} />
-      <mesh geometry={geo.box} material={mats.trim} position={[0, 0, 0.05]} scale={[0.04, p.h, 0.03]} />
+      {/* Reveal: the frame sits proud of the wall and throws a thin shadow. */}
+      <mesh geometry={geo.box} material={mats.trim} scale={[p.w + frame * 2, p.h + frame * 2, 0.07]} castShadow />
+      <mesh geometry={geo.plane} material={mats.glass} position={[0, 0, 0.037]} scale={[p.w, p.h, 1]} />
+      {/* Two casements and a transom: a window, not a hole. */}
+      <mesh geometry={geo.box} material={mats.trim} position={[0, 0, 0.05]} scale={[bar, p.h, 0.03]} />
+      <mesh geometry={geo.box} material={mats.trim} position={[0, p.h * 0.22, 0.05]} scale={[p.w, bar * 0.8, 0.03]} />
+      {/* Sill board. */}
+      <mesh
+        geometry={geo.box}
+        material={mats.trim}
+        position={[0, -p.h / 2 - frame + 0.012, 0.085]}
+        scale={[p.w + frame * 2 + 0.08, 0.035, 0.17]}
+        castShadow
+        receiveShadow
+      />
     </group>
   )
 }
 
 function DoorUnit({ p }: { p: Placed }) {
   const { geo, mats } = useKit()
+  const panelW = p.w - 0.3
   return (
     <group position={[p.x, p.y, p.z]} rotation={[0, p.wall.angle, 0]} onPointerDown={onGrab(p.fixture.id)}>
-      <mesh geometry={geo.box} material={mats.trim} scale={[p.w + 0.12, p.h + 0.06, 0.06]} />
-      <mesh geometry={geo.box} material={mats.door} position={[0, 0, 0.04]} scale={[p.w, p.h, 0.04]} />
+      {/* Architrave. */}
+      <mesh geometry={geo.box} material={mats.trim} scale={[p.w + 0.16, p.h + 0.08, 0.05]} castShadow />
+      <mesh geometry={geo.box} material={mats.door} position={[0, -0.005, 0.036]} scale={[p.w, p.h - 0.01, 0.04]} />
+      {/* Two recessed panels, read as shadow lines on the leaf. */}
+      <mesh geometry={geo.box} material={mats.doorPanel} position={[0, p.h * 0.2, 0.054]} scale={[panelW, p.h * 0.44, 0.006]} />
+      <mesh geometry={geo.box} material={mats.doorPanel} position={[0, -p.h * 0.26, 0.054]} scale={[panelW, p.h * 0.34, 0.006]} />
+      {/* Lever handle on its rose. */}
       <mesh
-        geometry={geo.sphere}
+        geometry={geo.cyl}
         material={mats.metal}
-        position={[p.w / 2 - 0.09, -0.05, 0.08]}
-        scale={[0.06, 0.06, 0.06]}
+        position={[p.w / 2 - 0.09, -0.03, 0.064]}
+        rotation={[Math.PI / 2, 0, 0]}
+        scale={[0.05, 0.012, 0.05]}
       />
+      <mesh geometry={geo.box} material={mats.metal} position={[p.w / 2 - 0.14, -0.03, 0.095]} scale={[0.12, 0.018, 0.018]} />
+      <mesh geometry={geo.box} material={mats.metal} position={[p.w / 2 - 0.09, -0.03, 0.08]} scale={[0.018, 0.018, 0.04]} />
     </group>
   )
 }
@@ -124,6 +156,14 @@ export function Fixtures({ walls }: { walls: Wall[] }) {
   const { geo, mats } = useKit()
   const placed = usePlacedFixtures(walls)
   const selection = useBuilder((s) => s.selection)
+  const lighting = useBuilder((s) => s.scene.lighting)
+  const invalidate = useThree((state) => state.invalidate)
+
+  // The view through the glass follows the time of day.
+  useEffect(() => {
+    mats.glass.color.set(SKY_TINT[lighting])
+    invalidate()
+  }, [mats, lighting, invalidate])
 
   const sockets = placed.filter((p) => p.fixture.kind === 'socket')
   const rest = placed.filter((p) => p.fixture.kind !== 'socket')

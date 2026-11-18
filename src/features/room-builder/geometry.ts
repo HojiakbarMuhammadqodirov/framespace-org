@@ -44,15 +44,17 @@ export const SHAPE_PRESETS: Record<RoomShape, Room> = {
 const PARTITION_AT = 0.62
 
 export function normaliseRoom(room: Room): Room {
-  const width = clamp(snap(room.width), ROOM_LIMITS.width[0], ROOM_LIMITS.width[1])
-  const depth = clamp(snap(room.depth), ROOM_LIMITS.depth[0], ROOM_LIMITS.depth[1])
+  // `tidy` after `snap`: 68 × 0.1 is 6.800000000000001 in floating point, and
+  // that is what ended up saved, sent to the render API and shown in a label.
+  const width = tidy(clamp(snap(room.width), ROOM_LIMITS.width[0], ROOM_LIMITS.width[1]))
+  const depth = tidy(clamp(snap(room.depth), ROOM_LIMITS.depth[0], ROOM_LIMITS.depth[1]))
   return {
     ...room,
     width,
     depth,
-    height: clamp(snap(room.height, 0.05), ROOM_LIMITS.height[0], ROOM_LIMITS.height[1]),
-    notchW: clamp(snap(room.notchW), 0.6, Math.max(0.6, width - 1.2)),
-    notchD: clamp(snap(room.notchD), 0.6, Math.max(0.6, depth - 1.2)),
+    height: tidy(clamp(snap(room.height, 0.05), ROOM_LIMITS.height[0], ROOM_LIMITS.height[1])),
+    notchW: tidy(clamp(snap(room.notchW), 0.6, Math.max(0.6, width - 1.2))),
+    notchD: tidy(clamp(snap(room.notchD), 0.6, Math.max(0.6, depth - 1.2))),
   }
 }
 
