@@ -1,11 +1,20 @@
 import { useTranslation } from 'react-i18next'
 
-import { MATERIAL_HEX, MATERIAL_KEYS, entryFor } from '../catalog'
+import {
+  MATERIAL_HEX,
+  MATERIAL_KEYS,
+  SIZE_RANGE,
+  WALL_PAINTS,
+  entryFor,
+  isStockSize,
+  sizeOf,
+} from '../catalog'
 import { metres, useMoneyFormat } from '../format'
 import { FIXTURE_SIZE, buildWalls, findWall } from '../geometry'
 import { findCollisions, useBuilder } from '../store'
 import type { MaterialKey, WallId } from '../types'
 import { Cta, IconButton, MOD_KEY, Panel, Pill, Readout, Stepper } from './chrome'
+import { PaintRow } from './panels'
 
 /**
  * Inspector for whatever is selected: a piece, a fixture, or a wall.
@@ -259,6 +268,9 @@ function SelectionPanel() {
   const scene = useBuilder((s) => s.scene)
   const snapshot = useBuilder((s) => s.snapshot)
   const moveItem = useBuilder((s) => s.moveItem)
+  const resizeItem = useBuilder((s) => s.resizeItem)
+  const resetItemSize = useBuilder((s) => s.resetItemSize)
+  const setWallOverride = useBuilder((s) => s.setWallOverride)
   const rotateItem = useBuilder((s) => s.rotateItem)
   const setItemMaterial = useBuilder((s) => s.setItemMaterial)
   const removeSelected = useBuilder((s) => s.removeSelected)
@@ -294,6 +306,17 @@ function SelectionPanel() {
           <Readout label={t('builder.inspector.wallLength')} value={`${metres(wall.length)} m`} />
           <Readout label="H" value={`${metres(scene.room.height)} m`} />
         </div>
+        <PaintRow
+          label={t('builder.inspector.wallPaint')}
+          value={scene.surfaces.wallOverrides[wall.id] ?? scene.surfaces.wall}
+          paints={WALL_PAINTS}
+          onPick={(hex) => setWallOverride(wall.id, hex)}
+        />
+        {scene.surfaces.wallOverrides[wall.id] && (
+          <Cta quiet block onClick={() => setWallOverride(wall.id, null)}>
+            {t('builder.inspector.wallPaintReset')}
+          </Cta>
+        )}
         <p className="rb-hint">
           {wall.handle ? t('builder.inspector.wallHint') : t('builder.room.hint')}
         </p>
@@ -345,6 +368,7 @@ function SelectionPanel() {
   const item = scene.items.find((i) => i.id === selection.id)
   if (!item) return null
   const entry = entryFor(item.catalogId)
+  const size = sizeOf(item)
   const colliding = findCollisions(scene.items).has(item.id)
   const rotationDeg = Math.round(((item.rotation * 180) / Math.PI + 360) % 360)
 
@@ -382,9 +406,9 @@ function SelectionPanel() {
         )}
 
         <div className="rb-insp__grid">
-          <Readout label="W" value={`${metres(entry.w)} m`} />
-          <Readout label="D" value={`${metres(entry.d)} m`} />
-          <Readout label="H" value={`${metres(entry.h)} m`} />
+          <Readout label="W" value={`${metres(size.w)} m`} />
+          <Readout label="D" value={`${metres(size.d)} m`} />
+          <Readout label="H" value={`${metres(size.h)} m`} />
           <Readout label="X" value={`${metres(item.x)} m`} />
           <Readout label="Z" value={`${metres(item.z)} m`} />
           <Readout label="R" value={`${rotationDeg}°`} />
@@ -415,16 +439,45 @@ function SelectionPanel() {
           onChange={(value) => rotateItem(item.id, (value * Math.PI) / 180)}
         />
 
-        <div className="rb-row">
-          <span className="rb-row__label">
-            <span>{t('builder.inspector.finish')}</span>
-            <span>{t(`builder.materials.${item.material}`)}</span>
-          </span>
-          <Swatches
-            value={item.material}
-            onPick={(key) => setItemMaterial(item.id, key)}
-          />
-        </div>
+        {(['w', 'd', 'h'] as const).map((axis) => {
+          // A rug has no height worth editing.
+          if (axis === 'h' && entry.kind === 'rug') return null
+          const label = { w: 'width', d: 'depth', h: 'height' }[axis]
+          return (
+            <Stepper
+              key={axis}
+              label={`${t('builder.inspector.size')} · ${t(`builder.inspector.${label}`)}`}
+              unit="m"
+              step={0.05}
+              decimals={2}
+              min={Math.round(entry[axis] * SIZE_RANGE.min * 100) / 100}
+              max={Math.round(entry[axis] * SIZE_RANGE.max * 100) / 100}
+              value={size[axis]}
+              onBegin={snapshot}
+              onChange={(value) => resizeItem(item.id, { [axis]: value }, false)}
+            />
+          )
+        })}
+        {!isStockSize(item) && (
+          <Cta quiet block onClick={() => resetItemSize(item.id)}>
+            {t('builder.inspector.resetSize')}
+          </Cta>
+        )}
+
+        {entry.tintable === false ? (
+          <p className="rb-hint">{t('builder.inspector.fixedFinish')}</p>
+        ) : (
+          <div className="rb-row">
+            <span className="rb-row__label">
+              <span>{t('builder.inspector.finish')}</span>
+              <span>{t(`builder.materials.${item.material}`)}</span>
+            </span>
+            <Swatches
+              value={item.material}
+              onPick={(key) => setItemMaterial(item.id, key)}
+            />
+          </div>
+        )}
 
         <div className="rb-row">
           <span className="rb-row__label">

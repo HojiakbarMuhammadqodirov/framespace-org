@@ -12,7 +12,7 @@ import { PRODUCTS, type Product } from '@/features/catalog/data'
 import { ViewportGate } from '@/features/catalog/chrome'
 import { useMoneyIn } from '@/features/capture/money'
 
-import { AppStyles, ArrowCta, Bezel, Eyebrow, IconButton, RevealBlur } from './Dashboard'
+import { AppNav, AppStyles, ArrowCta, Bezel, Eyebrow, IconButton, RevealBlur } from './Dashboard'
 
 const ProductViewer = lazy(() => import('@/three/ProductViewer'))
 const BY_ID = new Map(PRODUCTS.map((p) => [p.id, p]))
@@ -41,7 +41,24 @@ const CATEGORY_KIND: Record<string, Kind> = {
   decor: 'chair',
 }
 
+/** Chip order for the categories this page has its own (shorter) names for. */
 const CATEGORIES = ['seating', 'table', 'storage', 'lighting', 'textile', 'decor'] as const
+
+/**
+ * A category's name. Pins come from two vocabularies — the six shortlist
+ * categories above and the catalogue's own (`bed`, `rug`, `plants` …) — and
+ * only the first had copy here, so a pinned rug was labelled with its raw
+ * translation key. The catalogue's names are the fallback.
+ */
+function useCategoryLabel() {
+  const { t, i18n } = useTranslation()
+  return (category: string) =>
+    i18n.exists(`app.saved.categories.${category}`)
+      ? t(`app.saved.categories.${category}`)
+      : i18n.exists(`catalog.categories.${category}`)
+        ? t(`catalog.categories.${category}`)
+        : category
+}
 
 /** Three featured catalog pieces, one per category, for the empty state. */
 const SUGGESTIONS: Product[] = (() => {
@@ -249,6 +266,14 @@ export function Saved() {
   const remove = useSaved((s) => s.remove)
 
   const [category, setCategory] = useState<string>('all')
+  const categoryLabel = useCategoryLabel()
+  // Every category that is actually pinned gets a chip: the known six first,
+  // in their fixed order, then whatever else the catalogue brought.
+  const chips = useMemo(() => {
+    const present = new Set(items.map((i) => i.category))
+    const known = CATEGORIES.filter((c) => present.has(c)) as string[]
+    return [...known, ...[...present].filter((c) => !known.includes(c)).sort()]
+  }, [items])
 
   const visible = useMemo(
     () => (category === 'all' ? items : items.filter((i) => i.category === category)),
@@ -286,6 +311,7 @@ export function Saved() {
 
       <section className="fsd-page">
         <div className="fs-container">
+          <AppNav />
           <div className="fs-grid fss-head">
             <RevealBlur className="fss-head__text">
               <Eyebrow>{t('app.saved.eyebrow')}</Eyebrow>
@@ -320,7 +346,7 @@ export function Saved() {
                 >
                   {t('app.saved.all')}
                 </button>
-                {CATEGORIES.filter((c) => items.some((i) => i.category === c)).map((value) => (
+                {chips.map((value) => (
                   <button
                     key={value}
                     type="button"
@@ -328,7 +354,7 @@ export function Saved() {
                     aria-pressed={category === value}
                     onClick={() => setCategory(value)}
                   >
-                    {t(`app.saved.categories.${value}`)}
+                    {categoryLabel(value)}
                   </button>
                 ))}
               </div>
@@ -372,7 +398,7 @@ export function Saved() {
                               </div>
                             </Tilt>
                             <div className="fss-pin__body">
-                              <span className="fsd-badge">{t(`app.saved.categories.${product.category}`)}</span>
+                              <span className="fsd-badge">{categoryLabel(product.category)}</span>
                               <h3 className="fss-pin__title" style={{ fontSize: 'var(--step-1)' }}>
                                 <Link className="fss-pin__link" to={`/catalog/${product.slug}`}>
                                   {name}
@@ -431,6 +457,7 @@ function Pin({
   onRemove: () => void
 }) {
   const { t } = useTranslation()
+  const categoryLabel = useCategoryLabel()
   const money = useMoneyIn(product0Currency(item))
   const product = BY_ID.get(item.id)
   const name = product ? t(`catalog.products.${product.nameKey}.name`) : item.name
@@ -455,7 +482,7 @@ function Pin({
         </Tilt>
         <div className="fss-pin__body">
           <span className="fsd-badge">
-            {t(`app.saved.categories.${item.category}`, { defaultValue: item.category })}
+            {categoryLabel(item.category)}
           </span>
           <h3 className="fss-pin__title" style={{ fontSize: feature ? 'var(--step-2)' : 'var(--step-1)' }}>
             {product ? (

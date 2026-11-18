@@ -54,10 +54,16 @@ interface LightRig {
 }
 
 const LIGHT_RIGS: Record<LightingPreset, LightRig> = {
-  morning: { dir: [-1.1, 0.75, 0.35], color: '#ffe6c2', intensity: 1.15, ambient: 0.3, ambientColor: '#f6f1e9', env: 0.5 },
-  afternoon: { dir: [0.6, 1.5, 0.9], color: '#fff6e6', intensity: 1.5, ambient: 0.34, ambientColor: '#ffffff', env: 0.6 },
-  evening: { dir: [1.25, 0.42, -0.5], color: '#e9a06a', intensity: 0.85, ambient: 0.18, ambientColor: '#d8c6b4', env: 0.26 },
-  lamps: { dir: [0.2, 1.1, 0.4], color: '#cbb9a4', intensity: 0.1, ambient: 0.12, ambientColor: '#9e8d7e', env: 0.07 },
+  // `ambient` drives a hemisphere light, not a flat ambient one: the sky half
+  // lights what faces up, and the ground half — the floor's bounce — is what
+  // lights the ceiling and the undersides. Without that bounce a white ceiling
+  // renders charcoal and every wall goes grey, which is the difference between
+  // "a 3D model" and "a room". Intensities are in three's physical units, where
+  // π is "fully lit", so these are larger than they look.
+  morning: { dir: [-1.1, 0.75, 0.35], color: '#ffe6c2', intensity: 2.3, ambient: 1.55, ambientColor: '#fbf3e6', env: 0.5 },
+  afternoon: { dir: [0.6, 1.5, 0.9], color: '#fff6e6', intensity: 2.7, ambient: 1.85, ambientColor: '#ffffff', env: 0.55 },
+  evening: { dir: [1.25, 0.42, -0.5], color: '#f0a56c', intensity: 1.9, ambient: 0.95, ambientColor: '#e6cdb6', env: 0.28 },
+  lamps: { dir: [0.2, 1.1, 0.4], color: '#cbb9a4', intensity: 0.12, ambient: 0.3, ambientColor: '#8e86a0', env: 0.08 },
 }
 
 function SceneLights() {
@@ -67,7 +73,7 @@ function SceneLights() {
   const q = QUALITY[tier]
 
   const sun = useRef<THREE.DirectionalLight>(null)
-  const ambient = useRef<THREE.AmbientLight>(null)
+  const ambient = useRef<THREE.HemisphereLight>(null)
   const invalidate = useThree((state) => state.invalidate)
   const scene = useThree((state) => state.scene)
   const current = useRef({
@@ -143,6 +149,8 @@ function SceneLights() {
     }
     if (ambient.current) {
       ambient.current.color.copy(c.ambientColor)
+      // The bounce is the sky light after it has hit a warm floor.
+      ambient.current.groundColor.copy(c.ambientColor).multiply(BOUNCE)
       ambient.current.intensity = c.ambient
     }
   })
@@ -151,7 +159,7 @@ function SceneLights() {
 
   return (
     <>
-      <ambientLight ref={ambient} intensity={LIGHT_RIGS.afternoon.ambient} />
+      <hemisphereLight ref={ambient} intensity={LIGHT_RIGS.afternoon.ambient} />
       <primitive object={target} />
       <directionalLight
         ref={sun}
@@ -180,6 +188,9 @@ function SceneLights() {
     </>
   )
 }
+
+/** What a pale timber floor does to the light it throws back up. */
+const BOUNCE = new THREE.Color('#e9dccb')
 
 function colorsClose(a: THREE.Color, b: THREE.Color): boolean {
   return Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b) < 2e-3

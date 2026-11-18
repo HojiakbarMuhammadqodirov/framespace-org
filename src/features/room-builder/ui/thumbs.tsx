@@ -211,6 +211,58 @@ export function PieceThumb({ kind, color }: { kind: PieceKind; color: string }) 
         </>
       )
       break
+    case 'tvStand':
+      body = (
+        <>
+          {shadow}
+          <rect x="24" y="6" width="52" height="30" rx="2" fill={DARK} />
+          <rect x="26" y="8" width="48" height="26" rx="1" fill="#55463d" />
+          <rect x="47" y="36" width="6" height="4" fill={DARK} />
+          <rect x="14" y="40" width="72" height="12" rx="2" fill={base} />
+          <rect x="14" y="40" width="72" height="2.5" fill={top} />
+          <rect x="49.5" y="42.5" width="1" height="9.5" fill={side} />
+          <rect x="18" y="52" width="3" height="5" fill={DARK} />
+          <rect x="79" y="52" width="3" height="5" fill={DARK} />
+        </>
+      )
+      break
+    case 'nightstand':
+      body = (
+        <>
+          {shadow}
+          <path d="M43 12h14l4 12H39z" fill="#efe8dd" />
+          <rect x="49" y="24" width="2" height="6" fill={DARK} />
+          <rect x="30" y="30" width="40" height="20" rx="2" fill={base} />
+          <rect x="30" y="30" width="40" height="3" fill={top} />
+          <rect x="30" y="39.5" width="40" height="1" fill={side} />
+          <rect x="47" y="35" width="6" height="1.6" rx="0.8" fill={DARK} />
+          <rect x="47" y="44" width="6" height="1.6" rx="0.8" fill={DARK} />
+          <rect x="33" y="50" width="3" height="6" fill={DARK} />
+          <rect x="64" y="50" width="3" height="6" fill={DARK} />
+        </>
+      )
+      break
+    case 'sideTable':
+      body = (
+        <>
+          <ellipse cx="50" cy="57" rx="16" ry="2.5" fill="rgba(42,29,22,0.16)" />
+          <ellipse cx="50" cy="55" rx="11" ry="2.5" fill={DARK} />
+          <rect x="49" y="24" width="2" height="31" fill={DARK} />
+          <ellipse cx="50" cy="23" rx="24" ry="6" fill={side} />
+          <ellipse cx="50" cy="21" rx="24" ry="6" fill={top} />
+        </>
+      )
+      break
+    case 'pouf':
+      body = (
+        <>
+          <ellipse cx="50" cy="56" rx="26" ry="3.5" fill="rgba(42,29,22,0.16)" />
+          <rect x="26" y="26" width="48" height="29" rx="13" fill={base} />
+          <ellipse cx="50" cy="31" rx="21" ry="6" fill={top} />
+          <path d="M26 41h48" stroke={side} strokeWidth="1.6" />
+        </>
+      )
+      break
     default:
       body = (
         <>

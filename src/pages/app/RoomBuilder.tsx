@@ -247,6 +247,9 @@ const CSS = `
 }
 @media (max-width: 767px) {
   .rb-hud--tl { flex-direction: column; align-items: flex-start; border-radius: var(--radius-2xl); }
+  /* Three views fill a phone's width, so undo/redo drop to the second row,
+     beside the quality pill, instead of sitting on top of the last option. */
+  .rb-hud--tr { top: calc(var(--s3) + 58px); }
 }
 
 /* The quality pill is a real toggle: 44px of hit area around a 24px pill. */
@@ -730,6 +733,7 @@ export function RoomBuilder() {
   const viewOptions: Array<{ value: ViewMode; label: string }> = [
     { value: 'plan', label: t('builder.view.plan') },
     { value: 'perspective', label: t('builder.view.perspective') },
+    { value: 'walk', label: t('builder.view.walk') },
   ]
 
   const generateCta = (
@@ -865,7 +869,11 @@ export function RoomBuilder() {
                 onClick={() => setQuality(tier === 'low' ? 'high' : 'low')}
               >
                 <Pill tone={tier === 'low' ? 'warn' : 'quiet'}>
-                  {t('builder.quality.low', { defaultValue: 'Soddalashtirilgan 3D' })}
+                  {/* Names the mode you are IN. It used to read "Simplified 3D"
+                      in both states, so full quality looked like a downgrade. */}
+                  {tier === 'low'
+                    ? t('builder.quality.low', { defaultValue: 'Soddalashtirilgan 3D' })
+                    : t('builder.quality.high', { defaultValue: 'Realistik 3D' })}
                 </Pill>
               </button>
             </div>

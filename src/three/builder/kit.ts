@@ -12,9 +12,9 @@ import { GeoCache } from '../furniture/geometry'
 import {
   createFurnitureMats,
   disposeFurnitureMats,
-  wood,
   type FurnitureMats,
 } from '../furniture/materials'
+import { getContactShadowTexture, getOutsideViewTexture } from '../materials/floors'
 import { disposeMaterialDeep } from '../materials/maps'
 
 /**
@@ -81,17 +81,40 @@ export function createBuilderMaterials() {
   const clay500 = cssColor('--clay-500', '#6b4a35')
   const clay900 = cssColor('--clay-900', '#2a1d16')
 
-  // Pale oak boards; the floor plate's UVs are in metres, so the figure
-  // repeats every ~1.4 m like real planks.
-  const floor = wood(sand, 'high', [0.7, 0.7])
-  floor.roughness = 0.66
+  // The covering itself (boards, tile, carpet…) is applied by the room shell
+  // from `scene.surfaces.floor`; this is only the material it paints onto.
+  const floor = std(sand, 0.66)
+
+  // Joinery — frames, doors, skirting — is painted off-white, the way it is in
+  // nearly every finished interior. It also keeps a dark accent wall readable.
+  const joinery = '#f3efe8'
+
+  const glass = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false })
+  // Shared, cached texture: never disposed with the kit.
+  glass.map = getOutsideViewTexture()
+
+  // The pool of shade where a piece meets the floor (see Furniture.tsx).
+  const contact = new THREE.MeshBasicMaterial({
+    color: '#1c120c',
+    transparent: true,
+    opacity: 0.6,
+    depthWrite: false,
+    toneMapped: false,
+  })
+  contact.alphaMap = null
+  contact.map = getContactShadowTexture()
 
   return {
     floor,
+    contact,
     wall: std(paper, 0.99),
-    trim: std(clay500, 0.72),
-    metal: std('#8e8579', 0.4, 0.3),
-    glass: new THREE.MeshBasicMaterial({ color: cssColor('--white', '#ffffff') }),
+    trim: std(joinery, 0.6),
+    skirting: std(joinery, 0.55),
+    ceiling: new THREE.MeshStandardMaterial({ color: '#fbfaf7', roughness: 1, side: THREE.DoubleSide }),
+    /** Plan-view accents (grip pills) keep the brand's clay rather than white. */
+    grip: std(clay500, 0.72),
+    metal: std('#8e8579', 0.35, 0.85),
+    glass,
     lampGlow: new THREE.MeshBasicMaterial({ color: '#ffd3a0' }),
     /** Selection outline. Basic, so it stays legible under any lighting preset. */
     select: new THREE.LineBasicMaterial({ color: accent }),
@@ -99,7 +122,9 @@ export function createBuilderMaterials() {
     handle: std(accent, 0.45),
     socket: std(paper, 0.7),
     radiator: std(cssColor('--bg-raised', '#ffffff'), 0.55, 0.15),
-    door: std(clay900, 0.8),
+    door: std(joinery, 0.5),
+    doorPanel: std('#e7e1d7', 0.55),
+    screen: std(clay900, 0.25, 0.1),
   }
 }
 
@@ -154,6 +179,13 @@ export function disposeGeometries(geo: BuilderGeo) {
 }
 
 export function disposeMaterials(mats: BuilderMats) {
+  // The floor and glass maps are module-level caches shared across kits;
+  // detach them first so a theme flip does not dispose what the next kit reuses.
+  mats.floor.map = null
+  mats.floor.bumpMap = null
+  mats.floor.roughnessMap = null
+  mats.glass.map = null
+  mats.contact.map = null
   Object.values(mats).forEach((m) => disposeMaterialDeep(m))
 }
 

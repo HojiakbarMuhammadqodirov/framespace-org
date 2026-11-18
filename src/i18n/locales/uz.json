@@ -18,7 +18,11 @@
     "signup": "Roʻyxatdan oʻtish",
     "menu": "Menyu",
     "close": "Yopish",
-    "dashboard": "Mening loyihalarim"
+    "dashboard": "Loyihalarim",
+    "saved": "Saqlanganlar",
+    "settings": "Sozlamalar",
+    "logout": "Chiqish",
+    "account": "Hisob"
   },
   "dock": {
     "projects": "Loyihalar",

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 
 import { FIXTURE_SIZE, footprint, polygonArea, polygonPerimeter } from '../geometry'
 import { metres, squareMetres } from '../format'
+import { CEILING_PAINTS, FLOORS, WALL_PAINTS } from '../catalog'
 import { useBuilder } from '../store'
 import type { FixtureKind, LightingPreset, RoomShape } from '../types'
 import { MOD_KEY, Panel, Pill, Readout, Segmented, Stepper } from './chrome'
@@ -76,6 +77,35 @@ const CSS = `
   color: var(--text-strong);
 }
 .rb-fix:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* Free colour: a rainbow chip with the native picker laid invisibly over it. */
+.rb-swatch--well { position: relative; display: inline-block; overflow: hidden; }
+.rb-swatch--well input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer; border: 0; padding: 0;
+}
+.rb-swatch--well:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rb-swatch__dot--well {
+  background: conic-gradient(#e2574c, #e9b44c, #7fb069, #4aa3a2, #5b7fd1, #a56cc1, #e2574c);
+}
+/* Floor chips hint at the lay, not just the colour. */
+.rb-floor { background-blend-mode: multiply; }
+.rb-floor--oak, .rb-floor--ash, .rb-floor--walnut {
+  background-image: repeating-linear-gradient(0deg, rgba(0,0,0,0) 0 5px, rgba(0,0,0,.18) 5px 6px) !important;
+}
+.rb-floor--herringbone {
+  background-image:
+    repeating-linear-gradient(45deg, rgba(0,0,0,0) 0 4px, rgba(0,0,0,.2) 4px 5px),
+    repeating-linear-gradient(-45deg, rgba(0,0,0,0) 0 4px, rgba(0,0,0,.12) 4px 5px) !important;
+}
+.rb-floor--tile {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0,0,0,0) 0 9px, rgba(0,0,0,.22) 9px 10px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,0) 0 9px, rgba(0,0,0,.22) 9px 10px) !important;
+}
+.rb-floor--carpet {
+  background-image: radial-gradient(rgba(0,0,0,.16) 0.6px, rgba(0,0,0,0) 0.8px) !important;
+  background-size: 3px 3px !important;
+}
 `
 
 export function PanelStyles() {
@@ -107,6 +137,7 @@ export function RoomPanel() {
   ]
 
   return (
+    <>
     <Panel eyebrow={t('builder.room.shape')} title={t('builder.room.title')}>
       <Segmented
         block
@@ -182,6 +213,116 @@ export function RoomPanel() {
       </div>
 
       <p className="rb-hint">{t('builder.room.hint')}</p>
+    </Panel>
+    <SurfacePanel />
+    </>
+  )
+}
+
+/* --------------------------------------------------------------- surfaces */
+
+/**
+ * A row of colour chips plus a free colour well. The well is a native colour
+ * input: every platform already has a good picker, and it hands back a hex.
+ */
+export function PaintRow({
+  label,
+  value,
+  paints,
+  onPick,
+  onBegin,
+  custom = true,
+}: {
+  label: string
+  value: string
+  paints: Array<{ id: string; hex: string }>
+  onPick: (hex: string) => void
+  /** Called once as a colour-well drag starts, so it is one undo step. */
+  onBegin?: () => void
+  custom?: boolean
+}) {
+  const { t } = useTranslation()
+  const current = value.toLowerCase()
+  return (
+    <div className="rb-row">
+      <span className="rb-row__label">
+        <span>{label}</span>
+        <span>{current.toUpperCase()}</span>
+      </span>
+      <div className="rb-swatches">
+        {paints.map((paint) => (
+          <button
+            key={paint.id}
+            type="button"
+            className="rb-swatch"
+            aria-pressed={paint.hex === current}
+            aria-label={`${label} ${paint.hex}`}
+            title={paint.hex}
+            onClick={() => onPick(paint.hex)}
+          >
+            <span className="rb-swatch__dot" style={{ background: paint.hex }} />
+          </button>
+        ))}
+        {custom && (
+          <label className="rb-swatch rb-swatch--well" title={t('builder.room.customColor')}>
+            <span className="rb-swatch__dot rb-swatch__dot--well" />
+            <input
+              type="color"
+              value={current}
+              aria-label={`${label} — ${t('builder.room.customColor')}`}
+              onPointerDown={onBegin}
+              onChange={(event) => onPick(event.target.value.toLowerCase())}
+            />
+          </label>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function SurfacePanel() {
+  const { t } = useTranslation()
+  const surfaces = useBuilder((s) => s.scene.surfaces)
+  const setWallPaint = useBuilder((s) => s.setWallPaint)
+  const setFloor = useBuilder((s) => s.setFloor)
+  const setCeilingPaint = useBuilder((s) => s.setCeilingPaint)
+
+  return (
+    <Panel eyebrow={t('builder.room.surfaces')} title={t('builder.room.surfaces')}>
+      <PaintRow
+        label={t('builder.room.wallPaint')}
+        value={surfaces.wall}
+        paints={WALL_PAINTS}
+        onPick={setWallPaint}
+      />
+      <div className="rb-row">
+        <span className="rb-row__label">
+          <span>{t('builder.room.floor')}</span>
+          <span>{t(`builder.room.floors.${surfaces.floor}`)}</span>
+        </span>
+        <div className="rb-swatches">
+          {FLOORS.map((floor) => (
+            <button
+              key={floor.id}
+              type="button"
+              className="rb-swatch"
+              aria-pressed={floor.id === surfaces.floor}
+              aria-label={t(`builder.room.floors.${floor.id}`)}
+              title={t(`builder.room.floors.${floor.id}`)}
+              onClick={() => setFloor(floor.id)}
+            >
+              <span className={`rb-swatch__dot rb-floor rb-floor--${floor.id}`} style={{ background: floor.hex }} />
+            </button>
+          ))}
+        </div>
+      </div>
+      <PaintRow
+        label={t('builder.room.ceiling')}
+        value={surfaces.ceiling}
+        paints={CEILING_PAINTS}
+        onPick={setCeilingPaint}
+        custom={false}
+      />
     </Panel>
   )
 }

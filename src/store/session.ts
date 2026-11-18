@@ -8,12 +8,20 @@
  *
  * The session itself lives in an httpOnly cookie that JavaScript never sees.
  * What is persisted here is only a cached copy of the public user record (so
- * the UI does not flash "signed out" on reload) plus the local credit and
- * guest counters. `/api/auth/me` is called once on start-up and is the source
- * of truth: a 401 clears the cached user.
+ * the UI does not flash "signed out" on reload), the last known allowance and
+ * the guest counter. `/api/auth/me` is called once on start-up and is the
+ * source of truth: `user: null` clears the cached user.
+ *
+ * The monthly allowance (`credits`) is the server's number for a signed-in
+ * account — it arrives as `usage` beside `user` in every auth answer and in
+ * every live render answer (server/usage.js), so it follows the account across
+ * devices and resets on the 1st. Only the guest's single free render is still
+ * a counter in this browser.
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+
+import { runBeforeLogout } from './syncBus'
 
 export type Plan = 'free' | 'studio'
 
@@ -25,8 +33,17 @@ export type SessionUser = {
   createdAt: string
 }
 
-/** Credits for one billing period. Local counters until billing is real. */
+/** Generations for the current calendar month. */
 export type Credits = { used: number; total: number }
+
+/** `usage` as the server reports it (server/usage.js). */
+export type ServerUsage = { used: number; total: number; period?: string; resetsAt?: string }
+
+function creditsFrom(usage: unknown, fallback: Credits): Credits {
+  const u = usage as Partial<ServerUsage> | null | undefined
+  if (!u || typeof u.used !== 'number' || typeof u.total !== 'number') return fallback
+  return { used: Math.max(0, u.used), total: Math.max(0, u.total) }
+}
 
 export const PLAN_CREDITS: Record<Plan, number> = {
   free: 3,
@@ -87,7 +104,7 @@ async function authRequest(
   path: string,
   method: 'GET' | 'POST',
   body?: unknown
-): Promise<{ user?: ApiUser } | null> {
+): Promise<{ user?: ApiUser | null; usage?: ServerUsage } | null> {
   let res: Response
   try {
     res = await fetch(`/api/auth/${path}`, {
@@ -101,7 +118,8 @@ async function authRequest(
   }
   if (res.status === 204) return null
   const payload = (await res.json().catch(() => ({}))) as {
-    user?: ApiUser
+    user?: ApiUser | null
+    usage?: ServerUsage
     error?: string
     code?: string
   }
@@ -139,8 +157,13 @@ type SessionState = {
   signUp: (input: Registration) => Promise<SessionUser>
   logIn: (input: Credentials) => Promise<SessionUser>
   logOut: () => Promise<void>
-  /** Records that a render was spent. Returns false when nothing was left. */
-  consumeGeneration: () => boolean
+  /**
+   * Records that a render was spent. Pass the `usage` a live render answer
+   * carried and the account's figures are taken from the server as they are;
+   * without it (guests, or an older server) the local counter moves by one.
+   * Returns false when nothing was left.
+   */
+  consumeGeneration: (usage?: ServerUsage | null) => boolean
   /** Renders left: plan credits when signed in, the guest allowance when not. */
   generationsLeft: () => number
   setPlan: (plan: Plan) => void
@@ -167,7 +190,11 @@ export const useSession = create<SessionState>()(
             const payload = await authRequest('me', 'GET')
             const api = payload?.user
             const user = api ? toUser(api, get().user?.plan) : null
-            set({ user, status: 'ready' })
+            set((state) => ({
+              user,
+              status: 'ready',
+              credits: user ? creditsFrom(payload?.usage, state.credits) : state.credits,
+            }))
             return user
           } catch (err) {
             // 401 → definitely signed out. A network failure keeps the cached
@@ -194,7 +221,11 @@ export const useSession = create<SessionState>()(
           const user = toUser(payload.user)
           // A new account starts with its plan's allowance. Anything the
           // visitor spent as a guest is forgiven on sign-up.
-          set({ user, status: 'ready', credits: { used: 0, total: PLAN_CREDITS[user.plan] } })
+          set({
+            user,
+            status: 'ready',
+            credits: creditsFrom(payload.usage, { used: 0, total: PLAN_CREDITS[user.plan] }),
+          })
           return user
         } finally {
           set({ pending: false })
@@ -210,14 +241,14 @@ export const useSession = create<SessionState>()(
           })
           if (!payload?.user) throw new AuthFailure('unknown')
           const user = toUser(payload.user, get().user?.plan)
-          set((state) => ({
+          // The server's figures for THIS account. The fallback (an older
+          // server that sends none) starts clean rather than inheriting
+          // whatever the previous account on this browser had spent.
+          set({
             user,
             status: 'ready',
-            credits: {
-              used: Math.min(state.credits.used, PLAN_CREDITS[user.plan]),
-              total: PLAN_CREDITS[user.plan],
-            },
-          }))
+            credits: creditsFrom(payload.usage, { used: 0, total: PLAN_CREDITS[user.plan] }),
+          })
           return user
         } finally {
           set({ pending: false })
@@ -225,9 +256,11 @@ export const useSession = create<SessionState>()(
       },
 
       logOut: async () => {
-        // Clear locally first so the UI responds instantly; the cookie is
-        // dropped by the server in the background.
-        set({ user: null })
+        // Anything not yet mirrored to the account goes up while the cookie
+        // is still valid — after this the device copy is wiped (sync.ts), so
+        // this is the last chance for an edit made seconds ago.
+        if (get().user) await runBeforeLogout()
+        set({ user: null, credits: { used: 0, total: PLAN_CREDITS.free } })
         try {
           await authRequest('logout', 'POST')
         } catch {
@@ -235,9 +268,13 @@ export const useSession = create<SessionState>()(
         }
       },
 
-      consumeGeneration: () => {
+      consumeGeneration: (usage) => {
         const { user, credits, guestGenerationsUsed } = get()
         if (user) {
+          if (usage && typeof usage.used === 'number' && typeof usage.total === 'number') {
+            set({ credits: creditsFrom(usage, credits) })
+            return true
+          }
           if (credits.used >= credits.total) return false
           set({ credits: { ...credits, used: credits.used + 1 } })
           return true

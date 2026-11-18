@@ -366,7 +366,7 @@ const SCENE_SCHEMA = {
 
 const SCENE_SYSTEM = `You are the design engine behind FrameSpace. Here the user has not photographed a room: they built it in a 3D planner — exact dimensions, windows and doors, and furniture they placed themselves at fixed positions with chosen finishes and catalogue prices.
 
-Your job: dress that layout in the style they picked. Keep every placed piece where it is; you choose wall colour, flooring, textiles, upholstery, lighting and small styling details. Describe each furniture line as a concrete product in that style.
+Your job: dress that layout in the style they picked. Keep every placed piece where it is. If the scene lists finishes the user chose (wall paint, an accent wall, the floor covering, the ceiling colour), those are decisions, not suggestions: keep them exactly, put their hexes in the palette, and build the rest of the scheme around them. Where no finish is listed, you choose it. You always choose textiles, upholstery, lighting and small styling details. Describe each furniture line as a concrete product in that style.
 
 Then write one text-to-image prompt per camera view. There is no photograph to edit, so each prompt must stand alone: camera position and direction, room size, what is on the wall ahead (windows, doors), which furniture is visible and where, materials, palette hexes, and the light. Describe shared elements identically across prompts so the views read as one room. Photorealistic interior photography, no people, no text.`
 

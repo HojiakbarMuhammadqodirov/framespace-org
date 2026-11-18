@@ -139,6 +139,26 @@ only, and every 3D route is its own chunk.
 
 ---
 
+## Update — accounts, saving and generation (after the list below was written)
+
+The table under "What is honestly not finished" predates the server work and
+three of its rows are no longer true:
+
+- **Auth is real** (`server/auth.js`) and **projects belong to the account**:
+  `server/projects.js` + `src/store/sync.ts` mirror the dashboard, every result,
+  every 3D plan and the shortlist per user. Sign in on another device and the
+  same projects are there; sign out and they leave the browser.
+- **3D builder "Generate"** posts to `POST /api/render-scene` and lands on the
+  result page. One room is one project: `/app/room/new` mints a fresh id, the
+  first edit creates a draft on the dashboard, the first generation turns that
+  draft into the finished project, and "Open in 3D builder" reopens the plan.
+- **The monthly allowance is counted on the server** (`server/usage.js`) and
+  resets on the 1st. Guests keep a browser-side counter.
+- **Share links** are still not public — a result link opens for its owner
+  only. The UI says so.
+
+See README → API for the routes and the storage layout.
+
 ## What is honestly not finished, and why
 
 None of these are bugs. `server/` is frozen and has exactly four routes —

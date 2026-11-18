@@ -18,7 +18,11 @@
     "signup": "Sign up",
     "menu": "Menu",
     "close": "Close",
-    "dashboard": "My projects"
+    "dashboard": "My projects",
+    "saved": "Saved",
+    "settings": "Settings",
+    "logout": "Log out",
+    "account": "Account"
   },
   "dock": {
     "projects": "Projects",

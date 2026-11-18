@@ -34,6 +34,12 @@ function manualChunks(id) {
   return undefined
 }
 
+// Both ports are overridable so two checkouts (or two people in one checkout)
+// can run side by side: VITE_PORT moves the dev server, PORT moves the API —
+// the same PORT the Express server itself reads, so the proxy always follows it.
+const DEV_PORT = Number(process.env.VITE_PORT) || 5180
+const API_PORT = Number(process.env.PORT) || 8787
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -51,7 +57,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5180,
+    port: DEV_PORT,
     // Fail loudly if the port is taken instead of silently sharing it with
     // another project's dev server.
     strictPort: true,
@@ -60,7 +66,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8787',
+        target: `http://localhost:${API_PORT}`,
         changeOrigin: true,
       },
     },

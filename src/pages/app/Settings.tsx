@@ -8,11 +8,11 @@ import { LANGUAGES } from '@/i18n/config'
 import { usePrefs, type Currency, type Theme } from '@/store/prefs'
 import { useProjects, useSaved } from '@/store/projects'
 import { useSession } from '@/store/session'
-import { clearRecords } from '@/features/capture/store'
+import { eraseDevice } from '@/store/sync'
 import { radioProps, useDateFormat } from '@/features/capture/hooks'
 import { UZS_PER_USD, localeTagOf } from '@/features/capture/money'
 import { formatMoney } from '@/lib/styles.js'
-import { AppStyles, ArrowCta, Bezel, Eyebrow, RevealBlur } from './Dashboard'
+import { AppNav, AppStyles, ArrowCta, Bezel, Eyebrow, RevealBlur } from './Dashboard'
 
 /**
  * /app/settings — language, currency, theme, account, local data.
@@ -22,8 +22,12 @@ import { AppStyles, ArrowCta, Bezel, Eyebrow, RevealBlur } from './Dashboard'
  * attribute and the theme-color meta tag.
  *
  * The account section reads the server-backed session (/api/auth/me). "Log
- * out" ends the cookie session; "erase everything" also signs out and empties
- * this browser's local projects and saved pieces.
+ * out" ends the cookie session and — because a signed-in account's projects
+ * are kept on the server (src/store/sync.ts) — takes them off this browser.
+ * "Erase everything" is about THIS BROWSER only: for a guest it deletes the
+ * projects (there is no other copy); for an account it signs out and clears
+ * the device, and the account keeps everything. It never deletes from the
+ * account.
  */
 
 const CSS = `
@@ -148,7 +152,6 @@ export function Settings() {
   const projects = useProjects((s) => s.projects)
   const hydrate = useProjects((s) => s.hydrate)
   const savedItems = useSaved((s) => s.items)
-  const clearSaved = useSaved((s) => s.clear)
 
   const [confirming, setConfirming] = useState(false)
 
@@ -156,21 +159,15 @@ export function Settings() {
     hydrate()
   }, [hydrate])
 
-  function eraseEverything() {
-    // Local only. Projects go through the frozen storage helper's own API.
-    for (const project of projects) useProjects.getState().remove(project.id)
-    // The capture feature's own slice (compass trails, "before" photos — also
-    // for projects the archive already evicted) and any half-finished capture.
-    clearRecords()
-    try {
-      // DRAFT_KEY in features/capture/useCaptureFlow.ts.
-      sessionStorage.removeItem('framespace.capture.draft')
-    } catch {
-      // Storage blocked: there is no draft to remove either.
-    }
-    clearSaved()
-    void forgetEverything()
+  async function eraseEverything() {
     setConfirming(false)
+    // Signed in: this uploads anything still pending, ends the session and
+    // resets the local counters. (Going through `remove()` per project — as
+    // this used to — would now delete them from the account as well.)
+    await forgetEverything()
+    // Projects, capture slices, half-finished captures, builder plans and the
+    // shortlist: everything this browser holds.
+    eraseDevice()
   }
 
   return (
@@ -187,6 +184,7 @@ export function Settings() {
 
       <section className="fsd-page">
         <div className="fs-container" style={{ maxWidth: '58rem' }}>
+          <AppNav />
           <RevealBlur>
             <Eyebrow>{t('app.settings.eyebrow')}</Eyebrow>
             <TextReveal
@@ -352,7 +350,13 @@ export function Settings() {
               <Bezel tone="sunken">
                 <RevealGroup>
                   <RevealItem className="fsg-rowwrap">
-                    <Row label={t('app.settings.data.projects', { count: projects.length })}>
+                    <Row
+                      label={
+                        user
+                          ? t('app.settings.data.projectsAccount', { count: projects.length })
+                          : t('app.settings.data.projects', { count: projects.length })
+                      }
+                    >
                       <span className="fsg-count">{projects.length}</span>
                     </Row>
                   </RevealItem>
@@ -362,13 +366,16 @@ export function Settings() {
                     </Row>
                   </RevealItem>
                   <RevealItem className="fsg-rowwrap">
-                    <Row label={t('app.settings.data.forget')} hint={t('app.settings.data.forgetHint')}>
+                    <Row
+                      label={t('app.settings.data.forget')}
+                      hint={user ? t('app.settings.data.forgetHintAccount') : t('app.settings.data.forgetHint')}
+                    >
                       {confirming ? (
                         <div style={{ display: 'flex', gap: 'var(--s3)', alignItems: 'center', flexWrap: 'wrap' }}>
                           <span role="alert" style={{ fontSize: 'var(--step--1)', color: 'var(--err)' }}>
                             {t('app.settings.data.confirm')}
                           </span>
-                          <ArrowCta variant="quiet" className="fsg-danger" onClick={eraseEverything}>
+                          <ArrowCta variant="quiet" className="fsg-danger" onClick={() => void eraseEverything()}>
                             {t('app.settings.data.forget')}
                           </ArrowCta>
                           <button

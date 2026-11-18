@@ -17,6 +17,11 @@ npm run dev
 `npm run dev` starts both halves: the Vite frontend on **:5180** and the API on
 **:8787**, with `/api` proxied across. Open <http://localhost:5180>.
 
+Both ports can be moved without editing anything: `PORT` is the API port (read
+by the server *and* by the Vite proxy, so they always agree) and `VITE_PORT` is
+the dev-server port — e.g. `PORT=8797 VITE_PORT=5190 npm run dev` runs a second
+copy beside the first.
+
 To use it on your actual phone (which is the point — you need a camera), find
 your machine's LAN address and open `http://<that-address>:5180` on the phone
 over the same Wi-Fi. Vite is already bound to all interfaces.
@@ -61,7 +66,12 @@ HTML page or a stack trace. Unknown `/api/*` routes return 404 JSON.
 | `POST /api/auth/signup` | `{ name, email, password }` | 201 `{ user }` + `fs_session` cookie |
 | `POST /api/auth/login` | `{ email, password }` | 200 `{ user }` + cookie |
 | `POST /api/auth/logout` | — | 204, cookie cleared |
-| `GET /api/auth/me` | — | 200 `{ user }` (`user: null` for guests) |
+| `GET /api/auth/me` | — | 200 `{ user, usage }` (`user: null` for guests) |
+| `GET /api/projects` | — (session) | `{ projects: Meta[], deleted: string[] }` |
+| `GET /api/projects/:id` | — (session) | `{ project: Meta & { record, scene } }` |
+| `PUT /api/projects/:id` | any of `{ title, roomType, style, status, createdAt, notes, budget, cover, record, scene }` | `{ project: Meta }` — upsert; omitted fields are kept |
+| `DELETE /api/projects/:id` | — (session) | 204 |
+| `GET /api/saved` · `PUT /api/saved` | `{ items }` | `{ items, updatedAt }` — the furniture shortlist |
 | `POST /api/render` | `{ photos:[{angleId,data,mediaType}], style, budget?, notes?, locale? }` | `{ demoMode, style, locale, brief, renders, failures, elapsedMs }` |
 | `POST /api/render-scene` | the 3D builder's `ScenePayload` (`src/features/room-builder/payload.ts`, includes `locale`) | same shape as `/api/render`, plus `warnings` |
 | `POST /api/contact` | `{ name?, email, message }` | `{ ok: true }` |
@@ -76,9 +86,31 @@ configured, from `server/i18n.js` in demo mode. Image prompts stay in English.
 
 `user` is `{ id, name, email, createdAt }`. Error codes: `validation` (400, with
 a `fields` map), `invalid_json` (400), `invalid_credentials` (401),
-`unauthenticated` (401), `email_taken` (409), `payload_too_large` (413),
-`rate_limited` (429, with `Retry-After`), `provider_error` (502/422),
-`provider_busy` (503), `provider_timeout` / `timeout` (504), `not_found` (404).
+`unauthenticated` (401), `quota_exceeded` (402), `email_taken` (409),
+`project_limit` (409), `payload_too_large` (413), `rate_limited` (429, with
+`Retry-After`), `provider_error` (502/422), `provider_busy` (503),
+`provider_timeout` / `timeout` (504), `not_found` (404).
+
+**Projects belong to the account.** The browser keeps the working copy (the
+`framespace.projects.v1` archive, the capture slice, one
+`framespace.room.<id>` scene per 3D room, the shortlist) and guests use only
+that. For a signed-in account `src/store/sync.ts` mirrors every change to
+`/api/projects` and `/api/saved`, lists projects made on other devices and
+downloads one when it is opened, adopts what a guest made before signing up,
+and wipes the device copy on sign-out. On the server each user gets
+`DATA_DIR/projects/<userId>/index.json` (one metadata row per project, the
+shortlist, delete tombstones) plus one `p_<projectId>.json` per project (design
+brief, renders as data URLs, builder scene). Limits: `MAX_PROJECTS_PER_USER`
+(default 200), 24 MB per project.
+
+**Allowance.** A signed-in account gets `FREE_MONTHLY_RENDERS` (default 3) live
+generations per calendar month (UTC), counted in `DATA_DIR/usage.json` and
+reported as `usage: { used, total, period, resetsAt }` beside `user` in every
+auth answer and in each live render answer. At the limit `/api/render*` answers
+402 `quota_exceeded` before any provider is called. Demo-mode renders and
+results made only of fallback drawings are never counted. Guests are not tracked
+server-side: their one free render is a browser counter, and the per-IP
+`RENDER_RATE_LIMIT` is what bounds anonymous traffic.
 
 **Accounts.** Stored in `server/data/auth.json` (override with `DATA_DIR`;
 git-ignored), written atomically. Passwords are hashed with scrypt and a
@@ -100,6 +132,23 @@ Gemini key each view is generated from that prompt. Any view that fails is
 replaced by a perspective drawing of the actual scene (`render.fallback: true`,
 also listed in `failures`). In demo mode every view is that drawing: the real
 footprint, windows, doors and furniture, in the style's palette and lighting.
+
+## The 3D room builder
+
+`/app/room/:id` — draw a room, furnish it, then generate a design from it.
+
+- **Three views**: Plan (top-down, drag walls to resize), 3D (orbit from
+  outside) and Inside (eye level, under the ceiling).
+- **Room finishes**: wall paint (presets or any colour), an accent colour per
+  wall (select a wall), seven floor coverings, ceiling colour.
+- **Furniture**: 23 catalogue pieces. Every piece can be moved, rotated,
+  resized (width / depth / height), re-finished, duplicated and deleted; undo
+  and redo cover all of it. The scene saves itself per room.
+- **Realistic vs simplified 3D**: capable devices load real modelled furniture
+  (`public/models/*.glb`), drawn floor textures, soft shadows and a lit ceiling.
+  Weak GPUs get the code-built versions with shadows off. The pill in the
+  viewport switches between them; `?tier=high` / `?tier=low` forces one.
+- Model sources, licences and how to add more: [docs/MODELS.md](docs/MODELS.md).
 
 ## Production build
 
@@ -148,6 +197,8 @@ photogrammetry, and a true walk-through would need a different capture method.
 server/
   index.js      Express app: routes, validation, budget recomputation, lifecycle
   auth.js       accounts + sessions (scrypt, httpOnly cookie, JSON store)
+  projects.js   per-account projects, builder scenes and shortlist (JSON files)
+  usage.js      per-account monthly generation allowance
   scene.js      3D builder scene validation and plain-language description
   sceneDemo.js  scene brief without keys (renders via roomSvg.js)
   roomSvg.js    demo renderer: one-point-perspective SVG room illustrations
@@ -174,12 +225,20 @@ angle is a one-line change that both halves pick up.
 
 ## Known limits
 
-- The Archive lives in `localStorage`, which means it is per-device and capped
-  by the browser's storage quota. Renders are large; the app evicts the oldest
-  project rather than failing the save.
-- Accounts, sessions and contact messages live in JSON files under
-  `server/data/` — fine for one process; move to a database before scaling out.
-  Rate limits are in-memory per process for the same reason.
+- A guest's projects live only in `localStorage`: per-device and capped by the
+  browser's storage quota (the app evicts the oldest project rather than
+  failing the save). A signed-in account's projects are also kept on the
+  server, so an evicted one is still listed and re-downloaded when opened.
+- Accounts, sessions, projects, the allowance counter and contact messages live
+  in JSON files under `server/data/` (`DATA_DIR`) — fine for one process; move
+  to a database before scaling out. **`DATA_DIR` must be a persistent disk**:
+  on a host with an ephemeral filesystem every deploy would erase the accounts
+  and their projects. Rate limits are in-memory per process for the same reason.
+- Sync is last-write-wins per project slice (card fields / result / 3D plan).
+  Two devices editing the same room at the same moment keep whichever saved
+  last; there is no merge.
+- A result's link opens for its owner (signed in) or, for a guest, in that
+  browser only. There are no public share links; "Share" sends the image.
 - Contact messages append to `server/data/messages.json`. Point it at email or
   a ticketing tool before you take real traffic.
 - News content is authored in `src/screens/News.jsx`. Swap the array for a feed

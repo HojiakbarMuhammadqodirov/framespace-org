@@ -1,0 +1,9 @@
+3D model credits — FrameSpace room builder
+
+sofa-velvet.glb    "GlamVelvetSofa" (c) 2021 Wayfair, LLC. CC BY 4.0 https://creativecommons.org/licenses/by/4.0/
+accent-chair.glb   "SheenChair" (c) 2020 Wayfair, LLC. CC0 1.0
+plant-pot.glb      "DiffuseTransmissionPlant" (c) 2024 Darmstadt Graphics Group GmbH. CC BY 4.0. Original asset by Rico Cilliers (CC0 1.0).
+sofa-classic.glb   "SheenWoodLeatherSofa" (c) 2024 Darmstadt Graphics Group GmbH. CC BY 4.0. Original asset by Fran Calvente (CC0 1.0).
+
+Source: Khronos Group glTF Sample Assets, https://github.com/KhronosGroup/glTF-Sample-Assets
+Changes: lights, animation and material variants removed; meshes simplified; textures resized and converted to WebP; meshopt compression.

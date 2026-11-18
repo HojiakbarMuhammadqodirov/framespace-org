@@ -501,10 +501,19 @@ export function Panel({
 
 /* -------------------------------------------------------------- furniture */
 
-export function FurnitureList({ items, currency }: { items: FurnitureItem[]; currency: string }) {
+export function FurnitureList({
+  items,
+  currency,
+  emptyLabel,
+}: {
+  items: FurnitureItem[]
+  currency: string
+  /** What to say when the list is empty; defaults to "the furniture list is empty". */
+  emptyLabel?: string
+}) {
   const { t } = useTranslation()
   const { format } = useMoneyIn(currency)
-  if (!items.length) return <p className="cap-res__muted">{t('result.furniture.empty')}</p>
+  if (!items.length) return <p className="cap-res__muted">{emptyLabel ?? t('result.furniture.empty')}</p>
 
   return (
     <div className="cap-res__list" role="list">

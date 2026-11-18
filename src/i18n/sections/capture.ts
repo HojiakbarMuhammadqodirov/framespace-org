@@ -233,7 +233,7 @@ const bundle: Bundle = {
         },
         quota: {
           title: 'Limit tugadi',
-          body: "Bu qurilma uchun bepul generatsiyalar soni tugadi. Biroz kutib turing yoki tarifni kengaytiring.",
+          body: "Bepul generatsiyalar hozircha tugadi. Hisobda har oy uchtasi beriladi va ular oyning 1-kunida yangilanadi. Agar hozirgina koʻp soʻrov yuborgan boʻlsangiz, bir necha daqiqa kuting.",
         },
         storageFull: {
           title: 'Qurilmada joy yoʻq',
@@ -260,6 +260,10 @@ const bundle: Bundle = {
       storageFull: 'Qurilmada joy qolmadi — loyiha saqlanmadi. Rasmlarni yuklab oling yoki eski loyihalarni oʻchiring.',
       evicted: 'Joy ochish uchun eski loyihalar oʻchirildi: {{count}}.',
       shareLocalOnly: 'Havola faqat shu qurilmada ochiladi. Boshqalarga rasmlarni yuboring.',
+      shareAccountOnly: 'Havola nusxalandi. U faqat hisobingizga kirganingizda ochiladi — boshqalarga rasmlarni yuboring.',
+      storageFullAccount: 'Qurilmada joy qolmadi, shuning uchun loyiha faqat hisobingizda saqlandi. Uni “Loyihalarim”dan ochasiz.',
+      evictedAccount: 'Joy ochish uchun eski loyihalar shu qurilmadan olib tashlandi: {{count}}. Ular hisobingizda turibdi.',
+      rename: { action: 'Nomini oʻzgartirish', label: 'Loyiha nomi' },
       downloadAll: 'Hammasini yuklab olish',
       meta: {
         elapsed: '{{s}} soniyada',
@@ -287,7 +291,9 @@ const bundle: Bundle = {
         download: 'Rasmlarni yuklab olish ({{count}})',
         editor: '3D muharrirda ochish',
         localNote:
-          "Loyiha shu qurilmada saqlanadi. Havola ham shu brauzerda ochiladi — hozircha umumiy server saqlagichi yoʻq.",
+          "Loyiha faqat shu brauzerda saqlanadi. Hisob ochsangiz, u hisobingizda turadi va istalgan qurilmada ochiladi.",
+        accountNote:
+          "Loyiha hisobingizga saqlandi. Hisobingizga kirgan istalgan qurilmada ochiladi.",
       },
       design: { eyebrow: 'Dizayn' },
       furniture: {
@@ -331,6 +337,7 @@ const bundle: Bundle = {
         eyebrow: 'Elektr',
         title: 'Elektr nuqtalari',
         lead: "Bu roʻyxat yoritish qismidan olingan: quyidagi chiroqlar uchun rozetka yoki chiqish kerak boʻladi.",
+        empty: "Jihozlar roʻyxatida chiroq yoʻq — qoʻshimcha elektr nuqtasi kerak emas.",
       },
       room: {
         eyebrow: 'Xona',
@@ -576,7 +583,7 @@ const bundle: Bundle = {
         },
         quota: {
           title: 'Лимит исчерпан',
-          body: 'Бесплатные генерации для этого устройства закончились. Подождите или расширьте тариф.',
+          body: 'Бесплатные генерации пока закончились. В аккаунте их три в месяц, и они обновляются 1-го числа. Если вы только что отправили много запросов, подождите несколько минут.',
         },
         storageFull: {
           title: 'На устройстве нет места',
@@ -603,6 +610,10 @@ const bundle: Bundle = {
       storageFull: 'На устройстве нет места — проект не сохранён. Скачайте изображения или удалите старые проекты.',
       evicted: 'Чтобы освободить место, удалены старые проекты: {{count}}.',
       shareLocalOnly: 'Ссылка откроется только на этом устройстве. Другим отправьте изображения.',
+      shareAccountOnly: 'Ссылка скопирована. Она откроется только у вас, после входа в аккаунт, — другим отправьте изображения.',
+      storageFullAccount: 'На устройстве нет места, поэтому проект сохранён только в аккаунте. Он откроется из «Моих проектов».',
+      evictedAccount: 'Чтобы освободить место, с этого устройства убраны старые проекты: {{count}}. В аккаунте они остались.',
+      rename: { action: 'Переименовать', label: 'Название проекта' },
       downloadAll: 'Скачать всё',
       meta: { elapsed: 'за {{s}} с', demo: 'Демо-режим', shots: '{{count}} кадров' },
       stage: { before: 'До', after: 'После' },
@@ -622,7 +633,9 @@ const bundle: Bundle = {
         download: 'Скачать изображения ({{count}})',
         editor: 'Открыть в 3D-редакторе',
         localNote:
-          'Проект хранится на этом устройстве. Ссылка откроется в этом же браузере — общего серверного хранилища пока нет.',
+          'Проект хранится только в этом браузере. Создайте аккаунт — и он будет храниться в нём и открываться на любом устройстве.',
+        accountNote:
+          'Проект сохранён в вашем аккаунте. Он откроется на любом устройстве, где вы вошли.',
       },
       design: { eyebrow: 'Дизайн' },
       furniture: {
@@ -662,6 +675,7 @@ const bundle: Bundle = {
         eyebrow: 'Электрика',
         title: 'Точки подключения',
         lead: 'Список выведен из раздела освещения: для этих светильников понадобится вывод или розетка.',
+        empty: 'В списке мебели нет светильников — дополнительные точки подключения не нужны.',
       },
       room: {
         eyebrow: 'Комната',
@@ -907,7 +921,7 @@ const bundle: Bundle = {
         },
         quota: {
           title: 'You have hit the limit',
-          body: 'Free generations for this device are used up. Wait a little or move to a bigger plan.',
+          body: 'Your free generations are used up for now. An account gets three a month and they reset on the 1st. If you have just sent a lot of requests, wait a few minutes.',
         },
         storageFull: {
           title: 'No room left on the device',
@@ -934,6 +948,10 @@ const bundle: Bundle = {
       storageFull: 'This device is out of space — the project was not saved. Download the images or delete old projects.',
       evicted: 'Older projects removed to free up space: {{count}}.',
       shareLocalOnly: 'The link only opens on this device. Send the images to others instead.',
+      shareAccountOnly: 'Link copied. It opens only for you, signed in — send the images to others instead.',
+      storageFullAccount: 'This device is out of space, so the project is kept in your account only. It opens from “My projects”.',
+      evictedAccount: 'Older projects were taken off this device to free up space: {{count}}. They are still in your account.',
+      rename: { action: 'Rename', label: 'Project name' },
       downloadAll: 'Download all',
       meta: { elapsed: 'in {{s}}s', demo: 'Demo mode', shots: '{{count}} frames' },
       stage: { before: 'Before', after: 'After' },
@@ -953,7 +971,9 @@ const bundle: Bundle = {
         download: 'Download images ({{count}})',
         editor: 'Open in the 3D editor',
         localNote:
-          'The project lives on this device. The link opens in this browser only — there is no shared server storage yet.',
+          'This project is kept in this browser only. Create an account and it is kept there, and opens on any device.',
+        accountNote:
+          'Saved to your account. It opens on any device you sign in on.',
       },
       design: { eyebrow: 'Design' },
       furniture: {
@@ -993,6 +1013,7 @@ const bundle: Bundle = {
         eyebrow: 'Electrics',
         title: 'Points to wire',
         lead: 'Drawn from the lighting section: these fittings need an outlet or a ceiling point.',
+        empty: 'There are no light fittings in the furniture list, so there are no extra points to wire.',
       },
       room: {
         eyebrow: 'Room',

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink, useLocation } from 'react-router'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 
@@ -35,8 +35,15 @@ export function Header() {
   const setLang = usePrefs((s) => s.setLang)
   const theme = usePrefs((s) => s.theme)
   const toggleTheme = usePrefs((s) => s.toggleTheme)
+  const logOut = useSession((s) => s.logOut)
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  // The signed-in account menu (desktop). Until it existed the only "Log out"
+  // on the whole site sat on /app/settings, which nothing linked to.
+  const [accountOpen, setAccountOpen] = useState(false)
+  const accountRef = useRef<HTMLDivElement | null>(null)
+  const accountButtonRef = useRef<HTMLButtonElement | null>(null)
   const location = useLocation()
   const islandRef = useRef<HTMLElement | null>(null)
   const burgerRef = useRef<HTMLButtonElement | null>(null)
@@ -48,7 +55,36 @@ export function Header() {
   useEffect(() => {
     closedByNav.current = true
     setOpen(false)
+    setAccountOpen(false)
   }, [location.pathname])
+
+  // The account menu closes on a click anywhere else and on Escape (which
+  // hands focus back to the button that opened it).
+  useEffect(() => {
+    if (!accountOpen) return
+    const onPointer = (event: PointerEvent) => {
+      if (!accountRef.current?.contains(event.target as Node)) setAccountOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setAccountOpen(false)
+      accountButtonRef.current?.focus({ preventScroll: true })
+    }
+    document.addEventListener('pointerdown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [accountOpen])
+
+  /** Ends the session, then leaves the account's pages for the landing. */
+  async function signOut() {
+    setAccountOpen(false)
+    setOpen(false)
+    await logOut()
+    navigate('/')
+  }
 
   // A scroll listener would reflow on every frame; an observer on a sentinel
   // fires twice in the whole page's life.
@@ -180,6 +216,56 @@ export function Header() {
         .fs-hdr__divider {
           width: 1px; height: 18px; background: var(--bezel-ring); margin-inline: var(--s2);
         }
+        /* With the account button beside it the projects link has less room:
+           it must stay on one line rather than wrap inside its pill. */
+        .fs-hdr__auth .fs-btn { white-space: nowrap; }
+        .fs-hdr__acct { position: relative; }
+        .fs-hdr__acctbtn {
+          display: grid; place-items: center;
+          width: var(--tap); height: var(--tap);
+          border: 0; border-radius: var(--radius-full);
+          background: var(--bezel-shell);
+          box-shadow: inset 0 0 0 1px var(--bezel-ring);
+          color: var(--text-strong);
+          font-family: var(--font-mono); font-size: 0.8rem; font-weight: 500;
+          text-transform: uppercase;
+          cursor: pointer;
+        }
+        .fs-hdr__acctbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+        .fs-hdr__menu {
+          position: absolute; right: 0; top: calc(100% + var(--s3));
+          min-width: 15rem; max-width: min(20rem, 80vw);
+          display: grid;
+          padding: var(--s2);
+          border-radius: var(--radius-xl);
+          background: var(--bg-raised);
+          box-shadow: 0 0 0 1px var(--bezel-ring), var(--shadow-float);
+        }
+        .fs-hdr__who {
+          display: grid; gap: 2px;
+          padding: var(--s3) var(--s4) var(--s3);
+          border-bottom: 1px solid var(--hairline);
+          margin-bottom: var(--s2);
+        }
+        .fs-hdr__who strong { font-weight: 500; color: var(--text-strong); overflow-wrap: anywhere; }
+        .fs-hdr__who span { font-size: var(--step--1); color: var(--text-muted); overflow-wrap: anywhere; }
+        .fs-hdr__menuitem {
+          display: flex; align-items: center;
+          min-height: var(--tap);
+          padding: 0 var(--s4);
+          border: 0; border-radius: var(--radius-lg);
+          background: transparent;
+          color: var(--text);
+          font: inherit; font-size: var(--step--1);
+          text-align: left; text-decoration: none;
+          cursor: pointer;
+        }
+        .fs-hdr__menuitem:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+        .fs-hdr__menuitem[aria-current='page'] { color: var(--accent-ink); }
+        @media (hover: hover) and (pointer: fine) {
+          .fs-hdr__menuitem:hover { background: var(--bg-sunken); color: var(--text-strong); }
+        }
+        .fs-hdr__menuitem--out { border-top: 1px solid var(--hairline); border-radius: 0 0 var(--radius-lg) var(--radius-lg); margin-top: var(--s2); }
         .fs-hdr__overlay {
           /* Under the island (60) so the burger's morphing X stays on top and
              tappable as the close control; above the dock (50). */
@@ -294,9 +380,50 @@ export function Header() {
 
           <div className="fs-hdr__auth">
             {user ? (
-              <ButtonLink to="/app" size="sm" arrow aria-label={t('nav.dashboard')}>
-                {t('nav.dashboard')}
-              </ButtonLink>
+              <>
+                <ButtonLink to="/app" size="sm" arrow aria-label={t('nav.dashboard')}>
+                  {t('nav.dashboard')}
+                </ButtonLink>
+                <div className="fs-hdr__acct" ref={accountRef}>
+                  <button
+                    ref={accountButtonRef}
+                    type="button"
+                    className="fs-hdr__acctbtn"
+                    aria-haspopup="true"
+                    aria-expanded={accountOpen}
+                    aria-controls="account-menu"
+                    aria-label={t('nav.account')}
+                    title={t('nav.account')}
+                    onClick={() => setAccountOpen((v) => !v)}
+                  >
+                    {(user.name || user.email || '?').trim().charAt(0)}
+                  </button>
+                  {accountOpen && (
+                    <div className="fs-hdr__menu" id="account-menu">
+                      <p className="fs-hdr__who">
+                        <strong>{user.name}</strong>
+                        <span>{user.email}</span>
+                      </p>
+                      <NavLink to="/app" end className="fs-hdr__menuitem">
+                        {t('nav.dashboard')}
+                      </NavLink>
+                      <NavLink to="/app/saved" className="fs-hdr__menuitem">
+                        {t('nav.saved')}
+                      </NavLink>
+                      <NavLink to="/app/settings" className="fs-hdr__menuitem">
+                        {t('nav.settings')}
+                      </NavLink>
+                      <button
+                        type="button"
+                        className="fs-hdr__menuitem fs-hdr__menuitem--out"
+                        onClick={() => void signOut()}
+                      >
+                        {t('nav.logout')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
             ) : (
               <>
                 <Link to="/login" className="fs-navlink">
@@ -396,9 +523,20 @@ export function Header() {
 
                 <div style={{ display: 'grid', gap: 'var(--s3)', marginTop: 'var(--s10)' }}>
                   {user ? (
-                    <ButtonLink to="/app" block arrow size="lg">
-                      {t('nav.dashboard')}
-                    </ButtonLink>
+                    <>
+                      <ButtonLink to="/app" block arrow size="lg">
+                        {t('nav.dashboard')}
+                      </ButtonLink>
+                      <ButtonLink to="/app/saved" block variant="secondary">
+                        {t('nav.saved')}
+                      </ButtonLink>
+                      <ButtonLink to="/app/settings" block variant="secondary">
+                        {t('nav.settings')}
+                      </ButtonLink>
+                      <Button type="button" block variant="secondary" onClick={() => void signOut()}>
+                        {t('nav.logout')}
+                      </Button>
+                    </>
                   ) : (
                     <>
                       <ButtonLink to="/signup" block arrow size="lg">

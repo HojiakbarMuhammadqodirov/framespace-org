@@ -1,11 +1,18 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { Suspense, useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 
-import { MATERIAL_HEX, entryFor, type CatalogEntry, type PieceKind } from '@/features/room-builder/catalog'
+import {
+  MATERIAL_HEX,
+  entryFor,
+  sizeOf,
+  type CatalogEntry,
+  type PieceKind,
+} from '@/features/room-builder/catalog'
 import { useBuilder } from '@/features/room-builder/store'
-import type { Item } from '@/features/room-builder/types'
+import type { Item, ItemSize } from '@/features/room-builder/types'
 import { armDrag } from './dragIntent'
+import { GlbModel, ModelBoundary } from './GlbBody'
 import { useKit } from './kit'
 import {
   fabric,
@@ -29,9 +36,12 @@ import {
   FloorLamp,
   Plant,
   Rug,
+  M,
   Sideboard,
   Sofa,
+  TableLamp,
   Wardrobe,
+  useGeo,
 } from '../furniture/models'
 
 /**
@@ -67,6 +77,10 @@ const FINISH_ROLE: Record<PieceKind, FinishRole[]> = {
   rug: ['rug'],
   floorLamp: ['shade'],
   plant: ['leaf'],
+  tvStand: ['carcass'],
+  nightstand: ['carcass'],
+  sideTable: ['wood'],
+  pouf: ['upholstery', 'cushion'],
 }
 
 function makeFinish(kind: PieceKind, color: string, tier: Tier): THREE.MeshStandardMaterial {
@@ -137,7 +151,7 @@ export function legHeight(entry: CatalogEntry): number {
 
 /* ------------------------------------------------------------------ bodies */
 
-function FloorLampPiece({ entry, m }: { entry: CatalogEntry; m: FurnitureMats }) {
+function FloorLampPiece({ h, m }: { h: number; m: FurnitureMats }) {
   const lighting = useBuilder((s) => s.scene.lighting)
   const lit = lighting === 'lamps' || lighting === 'evening'
   const invalidate = useThree((state) => state.invalidate)
@@ -146,14 +160,67 @@ function FloorLampPiece({ entry, m }: { entry: CatalogEntry; m: FurnitureMats })
     ;(m.shade as THREE.MeshStandardMaterial).emissiveIntensity = lit ? 0.6 : 0
     invalidate()
   }, [m.shade, lit, invalidate])
-  return <FloorLamp m={m} h={entry.h} lit={lit} intensity={lighting === 'lamps' ? 7 : 4} />
+  return <FloorLamp m={m} h={h} lit={lit} intensity={lighting === 'lamps' ? 7 : 4} />
 }
 
-function Body({ entry, m }: { entry: CatalogEntry; m: FurnitureMats }) {
-  const { w, d, h } = entry
+/** A round pedestal table: turned top, slim stem, weighted foot. */
+function SideTable({ m, size }: { m: FurnitureMats; size: ItemSize }) {
+  const geo = useGeo()
+  const r = Math.min(size.w, size.d) / 2
+  return (
+    <group scale={[size.w / (r * 2), 1, size.d / (r * 2)]}>
+      <M g={geo.cyl(r, r * 0.97, 0.03)} m={m.wood} p={[0, size.h - 0.015, 0]} />
+      <M g={geo.cyl(0.018, 0.018, size.h - 0.04)} m={m.metal} p={[0, size.h / 2, 0]} />
+      <M g={geo.cyl(r * 0.5, r * 0.56, 0.018)} m={m.metal} p={[0, 0.009, 0]} />
+    </group>
+  )
+}
+
+function Pouf({ m, size }: { m: FurnitureMats; size: ItemSize }) {
+  const geo = useGeo()
+  const r = Math.min(size.w, size.d, size.h) * 0.42
+  return (
+    <group>
+      <M g={geo.block(size.w, size.h - 0.02, size.d, r, 0.03)} m={m.upholstery} p={[0, (size.h - 0.02) / 2 + 0.02, 0]} />
+      {/* A seam band: without it the pouf reads as a pebble. */}
+      <M g={geo.block(size.w + 0.006, 0.012, size.d + 0.006, r)} m={m.cushion} p={[0, size.h * 0.5, 0]} cast={false} />
+    </group>
+  )
+}
+
+/** Low media unit with a television on its stand. */
+function TvStand({ m, size }: { m: FurnitureMats; size: ItemSize }) {
+  const geo = useGeo()
+  const { mats } = useKit()
+  const standH = Math.min(0.5, size.h * 0.42)
+  const tvH = Math.max(0.2, size.h - standH - 0.05)
+  const tvW = Math.min(size.w * 0.86, tvH * (16 / 9))
+  const screenH = tvW * (9 / 16)
+  return (
+    <group>
+      <Sideboard m={m} w={size.w} d={size.d} h={standH} legH={0.1} decor={false} />
+      <M g={geo.block(tvW * 0.34, 0.012, size.d * 0.42, 0.004)} m={m.metal} p={[0, standH + 0.006, 0]} />
+      <M g={geo.block(0.05, 0.05, 0.03, 0.004)} m={m.metal} p={[0, standH + 0.03, -0.01]} />
+      <M g={geo.block(tvW, screenH, 0.028, 0.006)} m={m.metal} p={[0, standH + 0.05 + screenH / 2, 0]} />
+      <M g={geo.block(tvW - 0.016, screenH - 0.016, 0.004, 0.002)} m={mats.screen} p={[0, standH + 0.05 + screenH / 2, 0.015]} cast={false} />
+    </group>
+  )
+}
+
+function Nightstand({ m, size }: { m: FurnitureMats; size: ItemSize }) {
+  return (
+    <group>
+      <Sideboard m={m} w={size.w} d={size.d} h={size.h} legH={0.12} decor={false} />
+      <TableLamp m={m} p={[0, size.h, 0]} />
+    </group>
+  )
+}
+
+function Body({ entry, size, m }: { entry: CatalogEntry; size: ItemSize; m: FurnitureMats }) {
+  const { w, d, h } = size
   switch (entry.kind) {
     case 'sofa':
-      return <Sofa m={m} w={w} d={d} h={h} />
+      return <Sofa m={m} w={w} d={d} h={h} seats={w < 1.85 ? 2 : 3} />
     case 'armchair':
       return <Armchair m={m} w={w} d={d} h={h} />
     case 'lowTable':
@@ -175,17 +242,25 @@ function Body({ entry, m }: { entry: CatalogEntry; m: FurnitureMats }) {
     case 'rug':
       return <Rug m={m} w={w} d={d} fringe={false} />
     case 'floorLamp':
-      return <FloorLampPiece entry={entry} m={m} />
+      return <FloorLampPiece h={h} m={m} />
+    case 'tvStand':
+      return <TvStand m={m} size={size} />
+    case 'nightstand':
+      return <Nightstand m={m} size={size} />
+    case 'sideTable':
+      return <SideTable m={m} size={size} />
+    case 'pouf':
+      return <Pouf m={m} size={size} />
     default:
-      return <Plant m={m} h={h} w={w} kind="fiddle" />
+      return <Plant m={m} h={h} w={w} kind={entry.variant === 'palm' ? 'palm' : 'fiddle'} />
   }
 }
 
 /* ------------------------------------------------------------------ piece */
 
-function RotateHandle({ item, entry }: { item: Item; entry: CatalogEntry }) {
+function RotateHandle({ item, depth }: { item: Item; depth: number }) {
   const { geo, mats } = useKit()
-  const reach = entry.d / 2 + 0.3
+  const reach = depth / 2 + 0.3
   return (
     <group
       position={[0, 0.02, reach]}
@@ -207,9 +282,13 @@ function RotateHandle({ item, entry }: { item: Item; entry: CatalogEntry }) {
   )
 }
 
+/** Decoration (shade, outlines) must never take a press meant for the piece. */
+const noRaycast = () => null
+
 function Piece({ item, colliding }: { item: Item; colliding: boolean }) {
-  const { geo, mats, fmats } = useKit()
+  const { geo, mats, fmats, tier } = useKit()
   const entry = entryFor(item.catalogId)
+  const size = useMemo(() => sizeOf(item), [item])
   const material = useFinish(item, entry.kind)
   const m = useMemo<FurnitureMats>(() => {
     const set = { ...fmats }
@@ -231,18 +310,52 @@ function Piece({ item, colliding }: { item: Item; colliding: boolean }) {
     )
   }
 
+  const body = <Body entry={entry} size={size} m={m} />
+
   return (
     <group position={[item.x, 0, item.z]} rotation={[0, item.rotation, 0]} onPointerDown={onDown}>
-      <Body entry={entry} m={m} />
-      {(selected || colliding) && (
-        <lineSegments
-          geometry={geo.edges}
-          material={colliding ? mats.collide : mats.select}
-          position={[0, entry.h / 2 + 0.01, 0]}
-          scale={[entry.w + 0.04, entry.h + 0.02, entry.d + 0.04]}
+      {entry.model && tier === 'high' ? (
+        // The code-built body shows until the model has streamed in, and stays
+        // for good if it never does.
+        <ModelBoundary fallback={body}>
+          <Suspense fallback={body}>
+            <GlbModel
+              name={entry.model}
+              size={size}
+              tint={entry.tintable === false ? null : MATERIAL_HEX[item.material]}
+            />
+          </Suspense>
+        </ModelBoundary>
+      ) : (
+        body
+      )}
+      {/* Grounding: without a pool of shade underneath, furniture hovers. It
+          sits just above rug height so pieces ground on a rug as well. */}
+      {entry.kind !== 'rug' && (
+        <mesh
+          geometry={geo.plane}
+          material={mats.contact}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, 0.026, 0]}
+          scale={[size.w * 1.5 + 0.1, size.d * 1.5 + 0.1, 1]}
+          renderOrder={1}
+          raycast={noRaycast}
         />
       )}
-      {selected && <RotateHandle item={item} entry={entry} />}
+      {(selected || colliding) && (
+        <lineSegments
+          // Lines are picked with a 1 m tolerance by default, so this outline
+          // used to win the press on its own piece: the grab point landed on
+          // an edge up to half a sofa away and the piece jumped as the drag
+          // began. An outline is a drawing, not a target.
+          raycast={noRaycast}
+          geometry={geo.edges}
+          material={colliding ? mats.collide : mats.select}
+          position={[0, size.h / 2 + 0.01, 0]}
+          scale={[size.w + 0.04, size.h + 0.02, size.d + 0.04]}
+        />
+      )}
+      {selected && <RotateHandle item={item} depth={size.d} />}
     </group>
   )
 }

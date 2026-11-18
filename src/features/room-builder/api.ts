@@ -10,19 +10,54 @@ import type { RenderResponse } from '@/features/capture/types'
 import type { ScenePayload } from './payload'
 
 export const RENDER_SCENE_URL = '/api/render-scene'
-/** Generations take up to a couple of minutes on a real model. */
-export const RENDER_TIMEOUT_MS = 120_000
+/**
+ * A live generation is one Claude brief plus four image calls, each with its
+ * own retries; the server allows itself six minutes (RENDER_TIMEOUT_MS in
+ * server/index.js). Giving up at two — as this used to — abandoned requests
+ * the server was about to answer. Four minutes covers a retried provider call
+ * without leaving anyone staring at a dead connection for long.
+ */
+export const RENDER_TIMEOUT_MS = 240_000
 
-export type RenderSceneErrorKind = 'offline' | 'timeout' | 'aborted' | 'server' | 'quota' | 'bad-response'
+export type RenderSceneErrorKind =
+  | 'offline'
+  | 'timeout'
+  | 'aborted'
+  | 'server'
+  /** The account's monthly allowance (or the guest's free render) is spent. */
+  | 'quota'
+  /** Too many requests from this network in a short time — wait, don't upgrade. */
+  | 'rate-limited'
+  /** The AI provider is overloaded or timed out; trying again shortly works. */
+  | 'busy'
+  /** The server refused the scene itself (400). Retrying the same room will not help. */
+  | 'invalid'
+  | 'bad-response'
 
 export class RenderSceneError extends Error {
   kind: RenderSceneErrorKind
   status?: number
-  constructor(kind: RenderSceneErrorKind, message: string, status?: number) {
+  /** The server's machine-readable `code`, when it sent one. */
+  code?: string
+  constructor(kind: RenderSceneErrorKind, message: string, status?: number, code?: string) {
     super(message)
     this.kind = kind
     this.status = status
+    this.code = code
   }
+}
+
+/** Server status + `code` → what the sheet should say and offer. */
+function kindOf(status: number, code: string): RenderSceneErrorKind {
+  if (code === 'quota_exceeded' || status === 402) return 'quota'
+  if (code === 'rate_limited' || status === 429) return 'rate-limited'
+  if (code === 'provider_busy' || code === 'provider_timeout' || code === 'timeout' || status === 503 || status === 504) {
+    return 'busy'
+  }
+  if (code === 'validation' || code === 'invalid_json' || code === 'payload_too_large' || status === 400 || status === 413) {
+    return 'invalid'
+  }
+  return 'server'
 }
 
 export async function renderScene(
@@ -47,6 +82,9 @@ export async function renderScene(
     try {
       res = await fetch(RENDER_SCENE_URL, {
         method: 'POST',
+        // The session cookie rides along: a signed-in generation is counted
+        // against the account's allowance on the server.
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         signal: controller.signal,
@@ -68,11 +106,10 @@ export async function renderScene(
     }
 
     if (!res.ok) {
-      const message =
-        (data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string'
-          ? (data as { error: string }).error
-          : '') || `HTTP ${res.status}`
-      throw new RenderSceneError(res.status === 429 || res.status === 402 ? 'quota' : 'server', message, res.status)
+      const body = (data && typeof data === 'object' ? data : {}) as { error?: unknown; code?: unknown }
+      const message = (typeof body.error === 'string' ? body.error : '') || `HTTP ${res.status}`
+      const code = typeof body.code === 'string' ? body.code : ''
+      throw new RenderSceneError(kindOf(res.status, code), message, res.status, code)
     }
 
     if (!data || typeof data !== 'object') {

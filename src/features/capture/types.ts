@@ -162,6 +162,11 @@ export type RenderResponse = {
   elapsedMs?: number
   /** Non-fatal problems the server worked around (render-scene). */
   warnings?: Array<{ stage?: string; error?: string }>
+  /**
+   * The account's allowance after this generation was counted — only on a
+   * live (non-demo) answer to a signed-in account. See server/usage.js.
+   */
+  usage?: { used: number; total: number; period?: string; resetsAt?: string }
 }
 
 /* -------------------------------------------------------------- storage */
