@@ -6,6 +6,8 @@ import { loadProjects } from '@/lib/storage.js'
 import { STYLES } from '@/lib/styles.js'
 import { cacheRecord, newProjectId, persistRecord } from '@/features/capture/store'
 import { ROOM_TYPES, type CaptureRecord, type RoomTypeId } from '@/features/capture/types'
+import { localProject } from '@/store/projects'
+import { writeScene, type StoredScene } from '@/store/roomScene'
 import { useSession } from '@/store/session'
 
 import { RenderSceneError, renderScene } from '../api'
@@ -18,6 +20,12 @@ import { Cta, IconButton, Pill } from './chrome'
  * "Generate design" — sends the drawn room to `POST /api/render-scene`, saves
  * the answer as a project exactly like the capture flow does, and opens it on
  * the result page.
+ *
+ * One room is one project. The first generation of a room is saved under the
+ * room's own id, so the draft on the dashboard BECOMES the finished project
+ * (same card, same URL, "Open in 3D builder" brings this layout back). A later
+ * generation of a room that already has renders is saved as a new project with
+ * a copy of the plan — the earlier design is never overwritten.
  *
  * Three faces: a short setup (style, room name and type, a note), a progress
  * stage that tells the truth about a request that can take a minute or two,
@@ -277,24 +285,35 @@ export function GenerateStyles() {
   )
 }
 
-/** The scene is copied to the new project's builder key, so "Open in builder"
- *  on the result page brings this exact layout back. */
-function copySceneTo(projectId: string) {
-  try {
-    const { scene } = useBuilder.getState()
-    window.localStorage.setItem(
-      `framespace.room.${projectId}`,
-      JSON.stringify({ state: { scene }, version: 1 })
-    )
-  } catch {
-    /* quota: the project still opens; only the editable layout is lost */
-  }
+/** The scene is written to the project's builder key, so "Open in builder"
+ *  on the result page brings this exact layout back. (The store debounces its
+ *  own write — this one cannot be a moment behind.) A full quota only costs
+ *  the editable layout; the project still opens. */
+function saveSceneAs(projectId: string) {
+  writeScene(projectId, useBuilder.getState().scene as unknown as StoredScene)
+}
+
+/** Ids that never were a room of their own (see NewRoomRedirect in the router). */
+const SHARED_ROOM_IDS = ['new', 'draft']
+
+/**
+ * Where this generation is saved: under the room's id while that room has no
+ * renders yet, otherwise as a new project.
+ */
+function projectIdFor(roomId: string | null): string {
+  if (!roomId || SHARED_ROOM_IDS.includes(roomId)) return newProjectId()
+  return (localProject(roomId)?.renderCount ?? 0) > 0 ? newProjectId() : roomId
 }
 
 function errorKey(error: unknown): string {
   if (error instanceof RenderSceneError) return error.kind
   return 'server'
 }
+
+/** Kinds where the server's own sentence adds something to ours. */
+const DETAILED = ['server', 'invalid', 'bad-response']
+/** Kinds where pressing "try again" straight away cannot work. */
+const NO_RETRY = ['quota', 'invalid']
 
 export function GenerateSheet() {
   const { t } = useTranslation()
@@ -324,6 +343,13 @@ export function GenerateSheet() {
     const projects = loadProjects() as Array<{ id?: string; style?: string }>
     const fromProject = roomId ? projects.find((p) => p.id === roomId)?.style : undefined
     setStyle(STYLES.some((s) => s.name === fromProject) ? (fromProject as string) : 'Japandi')
+    // …and under the name it was given on the dashboard, unless that is still
+    // the placeholder every unnamed draft gets.
+    const draft = roomId ? localProject(roomId) : null
+    if (draft && !roomName && draft.title && draft.title !== t('app.dash.draftTitle')) {
+      setRoomName(draft.title.slice(0, 60))
+    }
+    if (draft && (ROOM_TYPES as string[]).includes(draft.roomType)) setRoomType(draft.roomType as RoomTypeId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -434,10 +460,10 @@ export function GenerateSheet() {
       stageTimers.forEach((id) => window.clearTimeout(id))
       setPhase({ kind: 'running', stage: 'save', startedAt })
 
-      if (!result.demoMode) useSession.getState().consumeGeneration()
+      if (!result.demoMode) useSession.getState().consumeGeneration(result.usage)
 
       const record: CaptureRecord = {
-        id: newProjectId(),
+        id: projectIdFor(roomId),
         createdAt: new Date().toISOString(),
         roomName: roomName.trim() || t(`capture.room.types.${roomType}`),
         roomType,
@@ -449,7 +475,7 @@ export function GenerateSheet() {
         result,
       }
       cacheRecord(record)
-      copySceneTo(record.id)
+      saveSceneAs(record.id)
       let storageFull = false
       let evicted = 0
       try {
@@ -657,7 +683,7 @@ export function GenerateSheet() {
                   )
                 })}
               </ol>
-              <p className="rb-hint">{t('builder.generate.wait')}</p>
+              <p className="rb-hint">{t('app.gen.wait')}</p>
               <div className="rb-gen__foot">
                 <Cta quiet onClick={dismiss}>
                   {t('builder.generate.cancel')}
@@ -669,8 +695,14 @@ export function GenerateSheet() {
           {phase.kind === 'error' && (
             <>
               <div className="rb-gen__error" role="alert">
-                <p style={{ margin: 0 }}>{t(`builder.generate.errors.${errorKey(phase.error)}`)}</p>
-                {phase.error.message && errorKey(phase.error) === 'server' && (
+                <p style={{ margin: 0 }}>
+                  {errorKey(phase.error) === 'quota' && !signedIn
+                    ? t('app.gen.errors.quotaGuest')
+                    : t(`app.gen.errors.${errorKey(phase.error)}`, {
+                        defaultValue: t('app.gen.errors.server'),
+                      })}
+                </p>
+                {phase.error.message && DETAILED.includes(errorKey(phase.error)) && (
                   <code>{phase.error.message}</code>
                 )}
               </div>
@@ -682,14 +714,14 @@ export function GenerateSheet() {
                   <Cta onClick={() => navigate(signedIn ? '/pricing' : '/signup')}>
                     {signedIn ? t('builder.generate.upgrade') : t('builder.generate.signup')}
                   </Cta>
-                ) : (
+                ) : NO_RETRY.includes(errorKey(phase.error)) ? null : (
                   <Cta onClick={generate}>{t('builder.generate.retry')}</Cta>
                 )}
               </div>
             </>
           )}
 
-          <p className="rb-hint">{t('builder.generate.savedNote')}</p>
+          <p className="rb-hint">{signedIn ? t('app.gen.savedAccount') : t('app.gen.savedDevice')}</p>
         </div>
       </div>
     </div>

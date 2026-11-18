@@ -15,6 +15,7 @@
  *    joins the two back together on read.
  */
 import { loadProjects, saveProject } from '@/lib/storage.js'
+import { projectChanged } from '@/store/syncBus'
 
 import { shrinkForStorage } from './frame'
 import type { CaptureRecord, RenderImage, RoomTypeId } from './types'
@@ -172,6 +173,26 @@ export async function persistRecord(record: CaptureRecord): Promise<PersistOutco
   const renders = await compactRenders(record.result.renders)
   const cover = renders[0]?.image ? await shrinkForStorage(renders[0].image, COVER_EDGE) : null
 
+  try {
+    return writeRecord(record, renders, cover)
+  } finally {
+    // Signed-in accounts mirror the project to the server (src/store/sync.ts)
+    // — also when this device had no room for it: the record is still in
+    // memory, and the account copy is then the only one that survives a reload.
+    projectChanged(record.id, 'all')
+  }
+}
+
+/**
+ * The two synchronous writes behind `persistRecord`, shared with
+ * `importRecord`. Throws `storage-full` when even this one record does not fit.
+ */
+function writeRecord(
+  record: CaptureRecord,
+  renders: RenderImage[],
+  cover: string | null,
+  status = 'ready'
+): PersistOutcome {
   // 1. The renders, once, in the shared archive. Its own loop evicts the
   //    oldest projects on quota; counting before and after tells us how many.
   const before = new Set(
@@ -189,7 +210,7 @@ export async function persistRecord(record: CaptureRecord): Promise<PersistOutco
         meta: {
           title: record.roomName,
           roomType: archiveRoomType(record.roomType),
-          status: 'ready',
+          status,
           createdAt: record.createdAt,
           cover,
         },
@@ -224,6 +245,39 @@ export async function persistRecord(record: CaptureRecord): Promise<PersistOutco
   if (!stored) throw new Error('storage-full')
 
   return { evicted }
+}
+
+/**
+ * A finished generation downloaded from the account (another device made it).
+ * Its renders were already compacted before they were uploaded, so this is the
+ * plain write — and it announces nothing, or the copy would be pushed straight
+ * back. The record is in memory even when the device has no room for it, so
+ * the page that asked for it can still show it.
+ */
+export function importRecord(record: CaptureRecord, cover: string | null): boolean {
+  cacheRecord(record)
+  try {
+    writeRecord(record, record.result.renders || [], cover)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * A new name for a saved generation. The dashboard's copy of the title lives
+ * in the shared archive (`useProjects.rename` writes that one); this is the
+ * capture slice and the in-memory record, which the result page reads first.
+ */
+export function renameRecord(id: string, roomName: string) {
+  const cached = memory.get(id)
+  if (cached) memory.set(id, { ...cached, roomName })
+  try {
+    const all = readAll()
+    if (all.some((r) => r.id === id)) writeAll(all.map((r) => (r.id === id ? { ...r, roomName } : r)))
+  } catch {
+    // Quota: the archive copy (written by the caller) still carries the name.
+  }
 }
 
 export function duplicateRecord(record: CaptureRecord): CaptureRecord {

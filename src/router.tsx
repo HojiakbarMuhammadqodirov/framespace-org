@@ -6,6 +6,9 @@ import { PublicLayout } from '@/layouts/PublicLayout'
 import { ImmersiveLayout } from '@/layouts/ImmersiveLayout'
 import { Placeholder } from '@/pages/Placeholder'
 import { ensureSections } from '@/i18n/config'
+// Small and import-light: the gates decide synchronously whether a project
+// route can mount, so they must not sit behind a lazy chunk of their own.
+import { NewRoomRedirect, ProjectGate, RoomRoute } from '@/pages/app/ProjectGate'
 // The landing is the first paint for most visitors: it ships in the entry
 // chunk instead of waiting on a second round trip. Its 3D scene and QR dialog
 // stay lazy inside it.
@@ -116,8 +119,8 @@ function AppRoutes() {
         <Route path="/app/capture" element={<Capture />} />
         {/* Capture navigates to /app/result/:id; the brief's sitemap
             calls it /app/projects/:id. Both resolve to the same page. */}
-        <Route path="/app/result/:id" element={<Result />} />
-        <Route path="/app/projects/:id" element={<Result />} />
+        <Route path="/app/result/:id" element={<ProjectGate><Result /></ProjectGate>} />
+        <Route path="/app/projects/:id" element={<ProjectGate><Result /></ProjectGate>} />
 
         {/* public catalog */}
         <Route path="/catalog" element={<Catalog />} />
@@ -150,13 +153,17 @@ function AppRoutes() {
 
       {/* Full-screen camera views: no header, dock, footer or backdrop. */}
       <Route element={<ImmersiveLayout />}>
-        <Route path="/app/projects/:id/live" element={<Live />} />
-        <Route path="/app/live/:id" element={<Live />} />
+        <Route path="/app/projects/:id/live" element={<ProjectGate><Live /></ProjectGate>} />
+        <Route path="/app/live/:id" element={<ProjectGate><Live /></ProjectGate>} />
       </Route>
 
       {/* The builder keeps the header as its way home, nothing else. */}
       <Route element={<ImmersiveLayout compact />}>
-        <Route path="/app/room/:id" element={<RoomBuilder />} />
+        {/* "new" is not a room: it mints a fresh id and redirects, so every
+            room started from the dashboard, the landing page or a catalogue
+            page is its own project instead of one shared scratch scene. */}
+        <Route path="/app/room/new" element={<NewRoomRedirect />} />
+        <Route path="/app/room/:id" element={<RoomRoute><RoomBuilder /></RoomRoute>} />
       </Route>
 
       {/* Outside every shell. */}

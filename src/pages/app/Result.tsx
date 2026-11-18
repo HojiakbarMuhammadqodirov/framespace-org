@@ -1,14 +1,17 @@
 /**
  * /app/result/:id — the finished room (brief §8).
  *
- * Everything on this page is one `/api/render` response plus the photos that
- * produced it. The response arrives once, in full, and is held in memory and in
- * this feature's own localStorage slot; there is no endpoint to re-fetch it
- * from, which is why "save" writes and "share" sends the image itself where
- * the phone allows it, and otherwise copies a link that only resolves on this
- * device — and says so.
+ * Everything on this page is one `/api/render` (or `/api/render-scene`)
+ * response plus the photos or the 3D plan that produced it. The response
+ * arrives once, in full, and is held in memory and in localStorage. For a
+ * signed-in account it is also mirrored to the server (src/store/sync.ts), and
+ * the route's `ProjectGate` downloads it before this page mounts — so the same
+ * address opens on any device the account is signed in on. A guest's result
+ * exists in this browser only, and the page says which of the two applies.
+ * "Share" sends the image itself where the phone allows it: the link is not
+ * public either way.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 
@@ -32,6 +35,9 @@ import {
   TagRow,
 } from '@/features/capture/ResultParts'
 import { duplicateRecord, getRecord, isSaved, persistRecord, variantsOf } from '@/features/capture/store'
+import { attachSceneCopy, renameProject } from '@/store/projectActions'
+import { hasScene as hasSceneFor } from '@/store/roomScene'
+import { useSession } from '@/store/session'
 
 const CSS = `
 .cap-result { min-height: 100dvh; background: var(--bg); padding-block: var(--s16) var(--s24); }
@@ -45,6 +51,48 @@ const CSS = `
 }
 .cap-result__head { display: grid; gap: var(--s5); justify-items: start; }
 .cap-result__title { font-size: var(--step-4); max-width: 14ch; }
+.cap-result__titlerow { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.cap-result__rename {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease);
+}
+.cap-result__rename:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  .cap-result__rename:hover { color: var(--text-strong); border-color: var(--border-strong); }
+}
+.cap-result__renameform { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; width: min(100%, 34rem); }
+.cap-result__renameform input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  min-height: var(--tap);
+  padding: 0 var(--s4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  background: var(--bg-raised);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: max(16px, var(--step-1));
+}
+.cap-result__renameform input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.cap-result__renameform button {
+  min-height: var(--tap);
+  padding: 0 var(--s3);
+  border: 0;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.cap-result__renameform button[type='submit'] { color: var(--accent-ink); }
 .cap-result__meta {
   display: flex;
   flex-wrap: wrap;
@@ -171,6 +219,10 @@ export function Result() {
   const downloadTimers = useRef<number[]>([])
   useEffect(() => () => downloadTimers.current.forEach((id) => window.clearTimeout(id)), [])
   const [qrOpen, setQrOpen] = useState(false)
+  const signedIn = useSession((s) => Boolean(s.user))
+  const [renaming, setRenaming] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  const nameInput = useRef<HTMLInputElement>(null)
 
   // The route can change under us (a duplicate, a back button) without the
   // component remounting.
@@ -192,14 +244,7 @@ export function Result() {
   const hasShots = Boolean(
     record && (record.capture?.shots?.length || Object.keys(record.before || {}).length)
   )
-  const hasScene = useMemo(() => {
-    if (!record) return false
-    try {
-      return localStorage.getItem(`framespace.room.${record.id}`) != null
-    } catch {
-      return false
-    }
-  }, [record])
+  const hasScene = useMemo(() => (record ? hasSceneFor(record.id) : false), [record])
   const fallbackCount = renders.filter((r) => r.fallback).length
   const warnings = (record?.result.warnings || []).filter((w) => w && (w.error || w.stage))
 
@@ -229,6 +274,9 @@ export function Result() {
     } catch {
       full = true
     }
+    // The 3D plan goes with it — or the copy could never be opened in the
+    // builder, which is the reason to copy a builder project at all.
+    attachSceneCopy(record.id, copy.id)
     setRecordId(copy.id)
     navigate(`/app/result/${copy.id}`, {
       state: { recordId: copy.id, storageFull: full, evicted: dropped },
@@ -238,6 +286,26 @@ export function Result() {
   }, [navigate, record])
 
   const stem = (record?.roomName || 'framespace').replace(/\s+/g, '-').toLowerCase()
+
+  const startRename = useCallback(() => {
+    if (!record) return
+    setNameDraft(record.roomName || '')
+    setRenaming(true)
+    window.setTimeout(() => nameInput.current?.select(), 0)
+  }, [record])
+
+  const submitRename = useCallback(
+    async (event: FormEvent) => {
+      event.preventDefault()
+      setRenaming(false)
+      const next = nameDraft.trim()
+      if (!record || !next || next === record.roomName) return
+      await renameProject(record.id, next)
+      // Re-read the record: the name on this page comes from it.
+      setSaveTick((n) => n + 1)
+    },
+    [nameDraft, record]
+  )
 
   const onShare = useCallback(async () => {
     if (!record || !active) return
@@ -316,9 +384,15 @@ export function Result() {
               <Eyebrow>{t('result.eyebrow')}</Eyebrow>
               <h1 style={{ fontSize: 'var(--step-3)' }}>{t('result.empty.title')}</h1>
               <p style={{ color: 'var(--text-muted)' }}>{t('result.empty.body')}</p>
-              <ArrowButton auto onClick={() => navigate('/app/capture')}>
-                {t('result.empty.cta')}
-              </ArrowButton>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--s3)' }}>
+                <ArrowButton auto onClick={() => navigate('/app/capture')}>
+                  {t('result.empty.cta')}
+                </ArrowButton>
+                {/* A stale or mistyped link: the way back to what does exist. */}
+                <ArrowButton auto quiet onClick={() => navigate('/app')}>
+                  {t('nav.dashboard')}
+                </ArrowButton>
+              </div>
             </div>
           </Bezel>
         </div>
@@ -339,9 +413,42 @@ export function Result() {
         {/* ------------------------------------------------------- header */}
         <Rise className="cap-result__head">
           <Eyebrow>{t('result.eyebrow')}</Eyebrow>
-          <h1 className="cap-result__title">
-            {record.roomName || t(`capture.room.types.${record.roomType}`)}
-          </h1>
+          {renaming ? (
+            <form className="cap-result__renameform" onSubmit={(event) => void submitRename(event)}>
+              <input
+                ref={nameInput}
+                value={nameDraft}
+                maxLength={120}
+                aria-label={t('result.rename.label')}
+                onChange={(event) => setNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setRenaming(false)
+                }}
+              />
+              <button type="submit">{t('common.save')}</button>
+              <button type="button" onClick={() => setRenaming(false)}>
+                {t('common.cancel')}
+              </button>
+            </form>
+          ) : (
+            <div className="cap-result__titlerow">
+              <h1 className="cap-result__title">
+                {record.roomName || t(`capture.room.types.${record.roomType}`)}
+              </h1>
+              <button
+                type="button"
+                className="cap-result__rename"
+                title={t('result.rename.action')}
+                aria-label={t('result.rename.action')}
+                onClick={startRename}
+              >
+                <svg viewBox="0 0 18 18" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
+                  <path d="M3.5 14.5 L4.2 11.4 L11.9 3.7 a1.2 1.2 0 0 1 1.7 0 l0.7 0.7 a1.2 1.2 0 0 1 0 1.7 L6.6 13.8 Z" strokeLinejoin="round" />
+                  <path d="M10.6 5 L13 7.4" />
+                </svg>
+              </button>
+            </div>
+          )}
           <div className="cap-result__meta">
             <span>{t(`styles.${record.style}`, { defaultValue: record.style })}</span>
             <span>{t(`capture.room.types.${record.roomType}`)}</span>
@@ -423,7 +530,9 @@ export function Result() {
                 <button
                   type="button"
                   className="cap-result__chip"
-                  onClick={() => navigate('/app/capture')}
+                  // Another version of a drawn room starts in the builder, with
+                  // this plan; of a photographed one, with new photographs.
+                  onClick={() => navigate(hasScene && !hasShots ? `/app/room/${record.id}` : '/app/capture')}
                 >
                   {t('result.variants.another')}
                 </button>
@@ -469,9 +578,9 @@ export function Result() {
                   <button type="button" className="cap-result__link" onClick={() => void onShare()}>
                     <span aria-live="polite">
                       {shareState === 'copied'
-                        ? t('result.shareLocalOnly', {
-                            defaultValue: 'Havola nusxalandi — u faqat shu qurilmada ochiladi',
-                          })
+                        ? signedIn
+                          ? t('result.shareAccountOnly')
+                          : t('result.shareLocalOnly')
                         : shareState === 'shared'
                           ? t('result.actions.shareDone')
                           : t('result.actions.share')}
@@ -512,7 +621,7 @@ export function Result() {
                 </div>
 
                 <p style={{ fontSize: 'var(--step--2)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em', lineHeight: 1.7 }}>
-                  {t('result.actions.localNote')}
+                  {signedIn ? t('result.actions.accountNote') : t('result.actions.localNote')}
                 </p>
 
                 {shareState === 'failed' && (
@@ -520,18 +629,22 @@ export function Result() {
                 )}
                 {storageFull && (
                   <Notice tone="warn" title={t('capture.errors.storageFull.title')}>
-                    {t('result.storageFull', {
-                      defaultValue: t('capture.errors.storageFull.body'),
-                    })}
+                    {signedIn
+                      ? t('result.storageFullAccount')
+                      : t('result.storageFull', {
+                          defaultValue: t('capture.errors.storageFull.body'),
+                        })}
                   </Notice>
                 )}
                 {!storageFull && evicted > 0 && (
                   <Notice tone="warn" title={t('result.actions.saved')}>
-                    {t('result.evicted', {
-                      count: evicted,
-                      defaultValue:
-                        'Joy boʻshatish uchun eng eski {{count}} ta loyiha qurilmadan oʻchirildi.',
-                    })}
+                    {signedIn
+                      ? t('result.evictedAccount', { count: evicted })
+                      : t('result.evicted', {
+                          count: evicted,
+                          defaultValue:
+                            'Joy boʻshatish uchun eng eski {{count}} ta loyiha qurilmadan oʻchirildi.',
+                        })}
                   </Notice>
                 )}
               </div>
@@ -583,6 +696,7 @@ export function Result() {
             <FurnitureList
               items={(brief.furniture || []).filter((item) => item.category === 'lighting')}
               currency={currency}
+              emptyLabel={t('result.electrics.empty')}
             />
           </Panel>
 

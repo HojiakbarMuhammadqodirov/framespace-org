@@ -23,7 +23,24 @@ const SCRYPT = { N: 32768, r: 8, p: 1, keylen: 64, maxmem: 64 * 1024 * 1024 }
 const MIN_PASSWORD = 8
 const MAX_PASSWORD = 512
 
-export function createAuth({ dataDir }) {
+/**
+ * @param {{ dataDir: string, extras?: (user: {id: string}) => Promise<object> | object }} options
+ *   `extras` adds account-scoped fields next to `user` in the signup / login /
+ *   me answers (the generation allowance) so the client learns them in the
+ *   same round trip instead of a second request on every page load.
+ */
+export function createAuth({ dataDir, extras }) {
+  const withExtras = async (user) => {
+    if (!extras) return { user }
+    try {
+      return { user, ...(await extras(user)) }
+    } catch (err) {
+      // Never fail a sign-in because a side table could not be read.
+      console.error('[auth] extras failed:', err?.message || err)
+      return { user }
+    }
+  }
+
   const store = new JsonStore(path.join(dataDir, 'auth.json'), () => ({ version: 1, users: [], sessions: [] }))
 
   // ------------------------------------------------------------------ crypto
@@ -169,7 +186,7 @@ export function createAuth({ dataDir }) {
         await startSession(res, created, req, data)
         return created
       })
-      res.status(201).json({ user: publicUser(user) })
+      res.status(201).json(await withExtras(publicUser(user)))
     })
   )
 
@@ -188,7 +205,7 @@ export function createAuth({ dataDir }) {
         const user = data.users.find((u) => u.id === found.id)
         if (user) await startSession(res, user, req, data)
       })
-      res.json({ user: publicUser(found) })
+      res.json(await withExtras(publicUser(found)))
     })
   )
 
@@ -219,7 +236,7 @@ export function createAuth({ dataDir }) {
         return res.json({ user: null })
       }
       res.set('Cache-Control', 'no-store')
-      res.json({ user })
+      res.json(await withExtras(user))
     })
   )
 

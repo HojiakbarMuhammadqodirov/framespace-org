@@ -37,7 +37,11 @@ import type {
 /** Map a thrown error onto a designed error screen. */
 function classify(err: unknown): FlowErrorKind {
   if ((err as Error)?.name === 'TimeoutError') return 'timeout'
-  if ((err as { status?: number })?.status === 429) return 'quota'
+  const status = (err as { status?: number })?.status
+  const code = (err as { code?: string })?.code
+  // 402 `quota_exceeded`: the account's monthly allowance. 429: too many
+  // requests from this network. Both read as "wait", neither as "it broke".
+  if (status === 402 || status === 429 || code === 'quota_exceeded' || code === 'rate_limited') return 'quota'
   const text = ((err as Error)?.message || '').toLowerCase()
   if (text === 'timeout') return 'timeout'
   if (/quota|too many|rate limit|429|limit reached/.test(text)) return 'quota'
@@ -721,7 +725,7 @@ export function useCaptureFlow(
       }
 
       // Demo answers are canned; they cost the person nothing.
-      if (!result.demoMode) useSession.getState().consumeGeneration()
+      if (!result.demoMode) useSession.getState().consumeGeneration(result.usage)
 
       const before: Record<AngleId, string> = {}
       await Promise.all(

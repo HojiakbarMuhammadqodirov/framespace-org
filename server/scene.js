@@ -10,6 +10,31 @@ const LIGHTING = ['morning', 'afternoon', 'evening', 'lamps']
 const SHAPES = ['rect', 'l', 'studio']
 const ID_RE = /^[A-Za-z0-9_.:-]{1,64}$/
 
+/**
+ * Forward-compatibility. The builder's payload grows optional fields over time
+ * (wall colour, floor material, per-item scale …) and this server may be older
+ * than the client that calls it. Fields this file does not know are therefore
+ * never a reason to reject the scene: simple values are carried through onto
+ * the cleaned object (bounded in count and size, so the description and the
+ * demo renderer can start using them without another validation change),
+ * anything nested or oversized is silently dropped.
+ */
+const EXTRA_KEY_RE = /^[A-Za-z][A-Za-z0-9_]{0,39}$/
+function extras(source, known) {
+  const out = {}
+  if (!source || typeof source !== 'object') return out
+  let kept = 0
+  for (const [key, value] of Object.entries(source)) {
+    if (known.includes(key) || !EXTRA_KEY_RE.test(key) || key === '__proto__') continue
+    if (kept >= 24) break
+    if (typeof value === 'string' ? value.length <= 120 : typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) {
+      out[key] = typeof value === 'string' ? value.trim() : value
+      kept += 1
+    }
+  }
+  return out
+}
+
 /** The four room views a scene renders to. Yaw matches server/angles.js. */
 export const SCENE_VIEWS = [
   { angleId: 'front', angleLabel: 'Front wall', wall: 'north', dir: [0, -1] },
@@ -56,7 +81,10 @@ export function validateScene(body) {
     throw badRequest('Send the room scene as a JSON object.', { body: 'must be an object' })
   }
 
-  if (body.version !== undefined && body.version !== '1.0') fail('version', 'unsupported version (expected "1.0")')
+  // Any 1.x payload is additive over 1.0 (see `extras` above); only a new major is refused.
+  if (body.version !== undefined && !/^1(\.\d{1,3}){0,2}$/.test(String(body.version))) {
+    fail('version', 'unsupported version (expected "1.x")')
+  }
   if (body.units !== undefined && body.units !== 'm') fail('units', 'must be "m"')
 
   const style = str(body.style, 'style', 64)
@@ -68,7 +96,10 @@ export function validateScene(body) {
   if (!r || typeof r !== 'object') fail('room', 'is required')
   else {
     room = {
-      shape: SHAPES.includes(r.shape) ? r.shape : (fail('room.shape', `must be one of ${SHAPES.join(', ')}`), 'rect'),
+      ...extras(r, ['shape', 'widthM', 'depthM', 'heightM', 'floorAreaM2', 'perimeterM', 'footprint']),
+      // An unknown shape name is not an error: the footprint polygon is what
+      // gets drawn, the name only picks a word for the description.
+      shape: SHAPES.includes(r.shape) ? r.shape : 'rect',
       widthM: num(r.widthM, 'room.widthM', 1, 40),
       depthM: num(r.depthM, 'room.depthM', 1, 40),
       heightM: num(r.heightM, 'room.heightM', 1.8, 8),
@@ -104,8 +135,11 @@ export function validateScene(body) {
           ;(w.openings || []).forEach((o, j) => {
             const ok = `${k}.openings[${j}]`
             if (!o || typeof o !== 'object') return fail(ok, 'must be an object')
+            // A fixture kind this server cannot draw yet is skipped, not refused.
+            if (!OPENING_KINDS.includes(o.kind)) return
             openings.push({
-              kind: OPENING_KINDS.includes(o.kind) ? o.kind : (fail(`${ok}.kind`, `must be one of ${OPENING_KINDS.join(', ')}`), 'window'),
+              ...extras(o, ['kind', 'offsetM', 'widthM', 'heightM', 'sillM']),
+              kind: o.kind,
               offsetM: num(o.offsetM, `${ok}.offsetM`, 0, 40),
               widthM: num(o.widthM, `${ok}.widthM`, 0.01, 10),
               heightM: num(o.heightM, `${ok}.heightM`, 0.01, 8),
@@ -114,6 +148,7 @@ export function validateScene(body) {
           })
         }
         walls.push({
+          ...extras(w, ['id', 'lengthM', 'azimuthDeg', 'interior', 'openings']),
           id: typeof w.id === 'string' && ID_RE.test(w.id) ? w.id : (fail(`${k}.id`, 'must be a short id'), `w${i}`),
           lengthM: num(w.lengthM, `${k}.lengthM`, 0.05, 60),
           azimuthDeg: num(w.azimuthDeg ?? 0, `${k}.azimuthDeg`, 0, 360),
@@ -131,6 +166,7 @@ export function validateScene(body) {
       const k = `items[${i}]`
       if (!it || typeof it !== 'object') return fail(k, 'must be an object')
       items.push({
+        ...extras(it, ['id', 'catalogId', 'category', 'widthM', 'depthM', 'heightM', 'x', 'z', 'rotationDeg', 'material', 'unitPriceUzs']),
         id: typeof it.id === 'string' && ID_RE.test(it.id) ? it.id : (fail(`${k}.id`, 'must be a short id'), `i${i}`),
         catalogId:
           typeof it.catalogId === 'string' && ID_RE.test(it.catalogId) ? it.catalogId : (fail(`${k}.catalogId`, 'must be a short id'), 'other'),
@@ -146,19 +182,71 @@ export function validateScene(body) {
       })
     })
 
+  // An unknown preset falls back to daylight rather than failing the request.
   const lightingPreset = body.lighting?.preset
   const lighting = LIGHTING.includes(lightingPreset) ? lightingPreset : 'afternoon'
-  if (lightingPreset !== undefined && !LIGHTING.includes(lightingPreset)) {
-    fail('lighting.preset', `must be one of ${LIGHTING.join(', ')}`)
-  }
 
   const b = body.budget && typeof body.budget === 'object' ? body.budget : {}
   const limit = b.limit === undefined || b.limit === null ? 0 : num(b.limit, 'budget.limit', 0, 1e13)
-  const currency = typeof b.currency === 'string' && /^[A-Z]{3}$/.test(b.currency) ? b.currency : body.currency || 'UZS'
+  const isCurrency = (v) => typeof v === 'string' && /^[A-Z]{3}$/.test(v)
+  const currency = isCurrency(b.currency) ? b.currency : isCurrency(body.currency) ? body.currency : 'UZS'
 
   if (Object.keys(fields).length) throw badRequest('The room scene is not valid.', fields)
 
-  return { version: '1.0', units: 'm', locale, style, notes, room, walls, items, lighting, budget: { currency, limit } }
+  const surfaces = readSurfaces(body.surfaces, walls)
+
+  const top = extras(body, ['version', 'units', 'currency', 'locale', 'style', 'notes', 'room', 'walls', 'items', 'surfaces', 'lighting', 'budget'])
+  return { ...top, version: '1.0', units: 'm', locale, style, notes, room, walls, items, surfaces, lighting, budget: { currency, limit } }
+}
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i
+
+/** What each floor covering is, in words an image model can paint. */
+const FLOOR_TEXT = {
+  oak: 'straight-laid natural oak floorboards',
+  ash: 'pale ash floorboards',
+  walnut: 'dark walnut floorboards',
+  herringbone: 'oak herringbone parquet',
+  tile: 'large light-grey porcelain floor tiles',
+  concrete: 'polished concrete floor',
+  carpet: 'wall-to-wall beige carpet',
+}
+
+/**
+ * The finishes the user picked in the builder (wall paint, accent walls, floor,
+ * ceiling). All optional and never a reason to fail the request: a scene from
+ * an older client simply has none, and the design engine then chooses them.
+ */
+function readSurfaces(raw, walls) {
+  if (!raw || typeof raw !== 'object') return null
+  const hex = (v) => (typeof v === 'string' && HEX_COLOR.test(v) ? v.toLowerCase() : null)
+  const wallIds = new Set(walls.map((w) => w.id))
+  const accentWalls = (Array.isArray(raw.accentWalls) ? raw.accentWalls : [])
+    .slice(0, 12)
+    .map((a) => ({ wall: typeof a?.wall === 'string' ? a.wall : '', color: hex(a?.color) }))
+    .filter((a) => a.color && wallIds.has(a.wall))
+  const surfaces = {
+    wallColor: hex(raw.wallColor),
+    accentWalls,
+    floor: typeof raw.floor === 'string' && FLOOR_TEXT[raw.floor] ? raw.floor : null,
+    ceilingColor: hex(raw.ceilingColor),
+  }
+  return surfaces.wallColor || surfaces.floor || surfaces.ceilingColor || accentWalls.length ? surfaces : null
+}
+
+/** One sentence on the chosen finishes, or '' when the user picked none. */
+export function surfacesText(scene, onlyWall) {
+  const s = scene.surfaces
+  if (!s) return ''
+  const parts = []
+  if (s.wallColor) parts.push(`walls painted ${s.wallColor}`)
+  for (const a of s.accentWalls) {
+    if (onlyWall && a.wall !== onlyWall) continue
+    parts.push(`the ${a.wall} wall is an accent wall painted ${a.color}`)
+  }
+  if (s.floor) parts.push(FLOOR_TEXT[s.floor])
+  if (s.ceilingColor) parts.push(`ceiling painted ${s.ceilingColor}`)
+  return parts.length ? `Finishes chosen by the user (keep exactly): ${parts.join('; ')}.` : ''
 }
 
 function polygonArea(pts) {
@@ -231,6 +319,8 @@ export function describeScene(scene) {
   } else {
     lines.push('The room is empty: no furniture has been placed yet.')
   }
+  const finishes = surfacesText(scene)
+  if (finishes) lines.push(finishes)
   lines.push(`Lighting: ${LIGHT_TEXT[scene.lighting]}.`)
   return lines.join('\n')
 }
@@ -256,6 +346,7 @@ export function viewPrompt(scene, view, design) {
     visible.length ? `Visible furniture: ${visible.join('; ')}.` : 'Little furniture is visible from here.',
     design?.palette?.length ? `Palette: ${design.palette.map((p) => `${p.name} ${p.hex}`).join(', ')}.` : '',
     design?.materials?.length ? `Materials: ${design.materials.join(', ')}.` : '',
+    surfacesText(scene, view.wall),
     `Lighting: ${LIGHT_TEXT[scene.lighting]}.`,
     'No people, no text, no watermark.',
   ]

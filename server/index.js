@@ -12,6 +12,8 @@ import { demoBrief, demoRenders } from './demo.js'
 import { demoSceneBrief, demoSceneRender, sceneExistingFeatures, sceneFurniture } from './sceneDemo.js'
 import { SCENE_VIEWS, describeScene, sceneLines, validateScene, viewPrompt } from './scene.js'
 import { createAuth } from './auth.js'
+import { createProjects } from './projects.js'
+import { createUsage } from './usage.js'
 import { angleLabel, resolveLocale, t as tr } from './i18n.js'
 import { JsonStore } from './lib/jsonStore.js'
 import {
@@ -52,6 +54,8 @@ if (corsOrigins.length) app.use('/api', cors({ origin: corsOrigins, credentials:
 // else is small JSON.
 const RENDER_BODY_LIMIT = process.env.RENDER_BODY_LIMIT || '30mb'
 app.use('/api/render', express.json({ limit: RENDER_BODY_LIMIT }))
+// A synced project carries its renders (data URLs) in the body, like a render answer.
+app.use('/api/projects', express.json({ limit: RENDER_BODY_LIMIT }))
 app.use('/api', express.json({ limit: '1mb' }))
 
 const demoMode = !claudeConfigured() || !geminiConfigured()
@@ -72,8 +76,15 @@ app.get('/api/angles', (req, res) => {
 })
 
 // --------------------------------------------------------------------- auth
-const auth = createAuth({ dataDir: DATA_DIR })
+// The monthly generation allowance rides along with every auth answer.
+const usage = createUsage({ dataDir: DATA_DIR })
+const auth = createAuth({ dataDir: DATA_DIR, extras: async (user) => ({ usage: await usage.get(user.id) }) })
 app.use('/api/auth', timeout(30_000), auth.router)
+
+// ----------------------------------------------------- projects + shortlist
+// Per-account copies of what the browser keeps in localStorage (see projects.js).
+const projects = createProjects({ dataDir: DATA_DIR, auth })
+app.use('/api', projects.router)
 
 // ------------------------------------------------------------------- render
 const renderLimiter = rateLimit({
@@ -184,6 +195,34 @@ function reconcileBudget(brief, budget) {
   }
 }
 
+// --- the monthly allowance (signed-in accounts, live mode only) -------------
+// Demo renders are canned drawings and cost nothing, so they are never
+// counted. Guests are bounded by the per-IP limiter above and by the client's
+// one-free-render counter; see usage.js.
+async function checkAllowance(req, locale) {
+  if (demoMode) return null
+  const user = await auth.currentUser(req)
+  if (!user) return null
+  const now = await usage.get(user.id)
+  if (now.used >= now.total) {
+    throw new HttpError(402, tr(locale).errors.quota, { code: 'quota_exceeded', details: { usage: now } })
+  }
+  return user
+}
+
+/** Count the generation only if the answer can still be delivered. */
+async function spendAllowance(req, res, user) {
+  if (!user) return undefined
+  if (req.timedOut || res.headersSent || req.socket?.destroyed) return undefined
+  try {
+    return await usage.consume(user.id)
+  } catch (err) {
+    // A counter that cannot be written must not cost the user their result.
+    console.error('[usage]', err?.message || err)
+    return undefined
+  }
+}
+
 // The whole pipeline: Claude reads the room and designs it, Gemini renders it.
 app.post(
   '/api/render',
@@ -193,6 +232,7 @@ app.post(
     const { photos, style, notes, budget } = validateRender(req.body)
     // Prose comes back in the user's language: body.locale, else Accept-Language, else Uzbek.
     const locale = resolveLocale(req.body.locale, req.headers['accept-language'])
+    const account = await checkAllowance(req, locale)
     const startedAt = Date.now()
 
     // --- Step 1: the design brief -------------------------------------------
@@ -230,7 +270,9 @@ app.post(
       })
     }
 
-    res.json({ demoMode, style, locale, brief, renders, failures, elapsedMs: Date.now() - startedAt })
+    const spent = await spendAllowance(req, res, account)
+    if (req.timedOut) return
+    res.json({ demoMode, style, locale, brief, renders, failures, elapsedMs: Date.now() - startedAt, usage: spent })
   })
 )
 
@@ -243,6 +285,7 @@ app.post(
   asyncRoute(async (req, res) => {
     const scene = validateScene(req.body)
     scene.locale = resolveLocale(req.body.locale, req.headers['accept-language'])
+    const account = await checkAllowance(req, scene.locale)
     const startedAt = Date.now()
     const warnings = []
     const lines = sceneLines(scene)
@@ -270,7 +313,8 @@ app.post(
         const byAngle = new Map((ai.renderPrompts || []).map((rp) => [rp.angleId, rp]))
         brief.renderPrompts = SCENE_VIEWS.map((v) => ({
           angleId: v.angleId,
-          angleLabel: v.angleLabel,
+          // Same localised label the demo brief uses — not the English constant.
+          angleLabel: angleLabel(v.angleId, scene.locale, v.angleLabel),
           prompt: byAngle.get(v.angleId)?.prompt || viewPrompt(scene, v, brief.design),
         }))
         brief.usage = ai.usage
@@ -302,6 +346,11 @@ app.post(
       renders = brief.renderPrompts.map((rp) => ({ ...rp, image: demoSceneRender(scene, rp.angleId, brief.design) }))
     }
 
+    if (req.timedOut) return
+    // A result made only of stand-in drawings (every image call failed) is
+    // not what the allowance is for — it is not counted.
+    const spent = renders.some((r) => !r.fallback) ? await spendAllowance(req, res, account) : undefined
+    if (req.timedOut) return
     res.json({
       demoMode,
       style: scene.style,
@@ -311,6 +360,7 @@ app.post(
       failures,
       warnings,
       elapsedMs: Date.now() - startedAt,
+      usage: spent,
     })
   })
 )

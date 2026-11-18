@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { Link, NavLink, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 
@@ -10,7 +10,6 @@ import { Seo } from '@/lib/seo'
 import { cn } from '@/lib/cn'
 import { GUEST_FREE_GENERATIONS, useSession } from '@/store/session'
 import { useDateFormat } from '@/features/capture/hooks'
-import { listRecords } from '@/features/capture/store'
 import { useMoneyIn } from '@/features/capture/money'
 import {
   ROOM_TYPES,
@@ -21,6 +20,8 @@ import {
   type ProjectStatus,
   type RoomType,
 } from '@/store/projects'
+import { createSampleProject, duplicateProject, renameProject } from '@/store/projectActions'
+import { retrySync, useSync } from '@/store/sync'
 
 /**
  * /app — the dashboard.
@@ -251,6 +252,21 @@ const IconCopy = () => (
   <svg viewBox="0 0 18 18" width="15" height="15" {...ICON}>
     <rect x="6" y="6" width="9" height="9" rx="1.5" />
     <path d="M12 6 V4.5 A1.5 1.5 0 0 0 10.5 3 H4.5 A1.5 1.5 0 0 0 3 4.5 V10.5 A1.5 1.5 0 0 0 4.5 12 H6" />
+  </svg>
+)
+
+const IconPencil = () => (
+  <svg viewBox="0 0 18 18" width="15" height="15" {...ICON} aria-hidden="true">
+    <path d="M3.5 14.5 L4.2 11.4 L11.9 3.7 a1.2 1.2 0 0 1 1.7 0 l0.7 0.7 a1.2 1.2 0 0 1 0 1.7 L6.6 13.8 Z" strokeLinejoin="round" />
+    <path d="M10.6 5 L13 7.4" />
+  </svg>
+)
+
+/** A floor plan with a partition and a door gap: "edit the room's layout". */
+const IconPlan = () => (
+  <svg viewBox="0 0 18 18" width="15" height="15" {...ICON} aria-hidden="true">
+    <path d="M3 3 H15 V15 H3 Z" strokeLinejoin="round" />
+    <path d="M9 3 V7.5 M9 10.5 V15 M3 10 H6" strokeLinecap="round" />
   </svg>
 )
 
@@ -680,12 +696,19 @@ export const APP_CSS = `
   position: absolute;
   top: var(--s3);
   right: var(--s3);
+  /* Bounded on the left too: a finished builder project carries six actions,
+     which wrap to a second row on a narrow cell instead of running off it. */
+  left: var(--s3);
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--s2);
+  pointer-events: none;
   opacity: 0;
   transform: translateY(-6px);
   transition: opacity var(--d-base) var(--ease), transform var(--d-base) var(--ease);
 }
+.fsd-card__tools > * { pointer-events: auto; }
 .fsd-card:hover .fsd-card__tools,
 .fsd-card:focus-within .fsd-card__tools { opacity: 1; transform: translateY(0); }
 @media (hover: none) {
@@ -714,6 +737,101 @@ export const APP_CSS = `
   font-size: var(--step--1);
 }
 .fsd-confirm button:first-of-type { color: var(--err); }
+
+/* ---- title row: the name, and the pencil that renames it ------------ */
+.fsd-card__titlerow { display: flex; align-items: flex-start; gap: var(--s2); }
+.fsd-card__titlerow .fsd-card__title { flex: 1; min-width: 0; }
+.fsd-rename {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  margin: -8px -8px -8px 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--d-fast) var(--ease), background-color var(--d-fast) var(--ease);
+}
+.fsd-rename:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  .fsd-rename:hover { color: var(--text-strong); background: var(--bg-sunken); }
+}
+.fsd-renameform { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.fsd-renameform .fs-input { flex: 1 1 10rem; min-width: 0; font-size: 16px; }
+.fsd-renameform button {
+  min-height: var(--tap);
+  padding-inline: var(--s3);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: var(--step--1);
+}
+.fsd-renameform button[type='submit'] { color: var(--accent-ink); }
+
+/* ---- /app section nav + where the projects are kept ---------------- */
+.fsd-appnav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3) var(--s5);
+  margin-bottom: var(--s10);
+}
+.fsd-appnav__tabs { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.fsd-appnav__tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding-inline: var(--s4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  color: var(--text);
+  font-size: var(--step--1);
+  text-decoration: none;
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease),
+    background-color var(--d-fast) var(--ease);
+}
+.fsd-appnav__tab:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.fsd-appnav__tab.active { background: var(--text-strong); border-color: var(--text-strong); color: var(--bg); }
+@media (hover: hover) and (pointer: fine) {
+  .fsd-appnav__tab:not(.active):hover { border-color: var(--border-strong); color: var(--text-strong); }
+}
+.fsd-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  font-family: var(--font-mono);
+  font-size: var(--step--2);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.fsd-sync__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); flex: none; }
+.fsd-sync[data-state='synced'] .fsd-sync__dot { background: var(--ok); }
+.fsd-sync[data-state='syncing'] .fsd-sync__dot { background: var(--accent); animation: fsd-sync-pulse 1.2s var(--ease) infinite; }
+.fsd-sync[data-state='error'] .fsd-sync__dot { background: var(--err); }
+.fsd-sync button, .fsd-sync a {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@keyframes fsd-sync-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .fsd-sync__dot { animation: none !important; } }
 
 /* ---- empty state --------------------------------------------------- */
 .fsd-empty { display: grid; gap: var(--s10); align-items: center; }
@@ -777,30 +895,59 @@ const CELLS = ['wide', 'narrow', 'narrow', 'wide', 'half', 'half'] as const
 function ProjectCard({
   project,
   cell,
-  hasRecord,
+  signedIn,
   onDelete,
   onDuplicate,
+  onRename,
 }: {
   project: Project
   cell: (typeof CELLS)[number]
-  /** Whether a capture record exists for this project (computed once by the list). */
-  hasRecord: boolean
+  signedIn: boolean
   onDelete: () => void
   onDuplicate: () => void
+  onRename: (title: string) => void
 }) {
   const { t } = useTranslation()
   const format = useDateFormat()
   const [confirming, setConfirming] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [draftTitle, setDraftTitle] = useState(project.title)
+  const renameInput = useRef<HTMLInputElement>(null)
+  const renameButton = useRef<HTMLButtonElement>(null)
 
-  // A project that came out of capture reopens on its result; one made by
-  // hand (or whose capture slice was evicted) opens in the room editor.
-  const href = hasRecord ? `/app/result/${project.id}` : `/app/room/${project.id}`
+  // A finished design reopens on its result page — wherever it was made, and
+  // whether or not this device still holds the capture slice (that used to
+  // decide it, and sent finished projects into an empty editor). A draft has
+  // nothing to show yet, so it opens where the work is: the 3D builder.
+  const finished = project.renderCount > 0
+  const href = finished ? `/app/result/${project.id}` : `/app/room/${project.id}`
+  const roomHref = `/app/room/${project.id}`
+  const title = project.title || t('app.dash.draftTitle')
+
+  function startRename() {
+    setDraftTitle(project.title)
+    setRenaming(true)
+    // After the input has replaced the heading.
+    window.setTimeout(() => renameInput.current?.select(), 0)
+  }
+
+  function stopRename() {
+    setRenaming(false)
+    window.setTimeout(() => renameButton.current?.focus(), 0)
+  }
+
+  function submitRename(event: FormEvent) {
+    event.preventDefault()
+    const next = draftTitle.trim()
+    if (next && next !== project.title) onRename(next)
+    stopRename()
+  }
 
   async function share() {
-    // There is no share backend. The project lives in this browser's
-    // localStorage, so the link only resolves on this device — it is a
-    // placeholder for the real short link once projects are server-side.
+    // The link opens the project for whoever is signed in to this account —
+    // or, for a guest, only in this browser. It is not a public link; the
+    // badge that follows says which.
     const url = `${window.location.origin}${href}`
     const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> }
     if (nav.share) {
@@ -852,18 +999,30 @@ function ProjectCard({
             <IconButton label={t('app.dash.actions.open')} to={href}>
               <IconOpen />
             </IconButton>
-            <IconButton
-              label={t('app.dash.actions.see')}
-              to={`/app/projects/${project.id}/live`}
-            >
-              <IconRoom />
-            </IconButton>
-            <IconButton
-              label={copied ? t('app.dash.actions.copied') : t('app.dash.actions.share')}
-              onClick={share}
-            >
-              <IconShare />
-            </IconButton>
+            {/* The plan behind a finished design: edit it and generate again.
+                (A draft's "open" already goes to the builder.) */}
+            {finished && project.hasScene && (
+              <IconButton label={t('app.dash.actions.edit3d')} to={roomHref}>
+                <IconPlan />
+              </IconButton>
+            )}
+            {/* Looking around the room and sharing it both need renders. */}
+            {finished && (
+              <IconButton
+                label={t('app.dash.actions.see')}
+                to={`/app/projects/${project.id}/live`}
+              >
+                <IconRoom />
+              </IconButton>
+            )}
+            {finished && (
+              <IconButton
+                label={copied ? t('app.dash.actions.copied') : t('app.dash.actions.share')}
+                onClick={share}
+              >
+                <IconShare />
+              </IconButton>
+            )}
             <IconButton label={t('app.dash.actions.duplicate')} onClick={onDuplicate}>
               <IconCopy />
             </IconButton>
@@ -882,9 +1041,7 @@ function ProjectCard({
               role="status"
               style={{ position: 'absolute', left: 'var(--s3)', right: 'var(--s3)', bottom: 'var(--s3)', whiteSpace: 'normal' }}
             >
-              {t('result.shareLocalOnly', {
-                defaultValue: 'Havola nusxalandi — u faqat shu qurilmada ochiladi',
-              })}
+              {signedIn ? t('app.dash.share.account') : t('app.dash.share.device')}
             </span>
           )}
 
@@ -913,12 +1070,44 @@ function ProjectCard({
             <span className="fsd-badge">{t(`app.rooms.${project.roomType}`)}</span>
           </motion.div>
 
-          <h3
-            className="fsd-card__title"
-            style={{ fontSize: cell === 'wide' ? 'var(--step-2)' : 'var(--step-1)' }}
-          >
-            <Link to={href}>{project.title}</Link>
-          </h3>
+          {renaming ? (
+            <form className="fsd-renameform" onSubmit={submitRename}>
+              <input
+                ref={renameInput}
+                className="fs-input"
+                value={draftTitle}
+                maxLength={120}
+                aria-label={t('app.dash.actions.renameLabel')}
+                onChange={(event) => setDraftTitle(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') stopRename()
+                }}
+              />
+              <button type="submit">{t('common.save')}</button>
+              <button type="button" onClick={stopRename}>
+                {t('common.cancel')}
+              </button>
+            </form>
+          ) : (
+            <div className="fsd-card__titlerow">
+              <h3
+                className="fsd-card__title"
+                style={{ fontSize: cell === 'wide' ? 'var(--step-2)' : 'var(--step-1)' }}
+              >
+                <Link to={href}>{title}</Link>
+              </h3>
+              <button
+                ref={renameButton}
+                type="button"
+                className="fsd-rename"
+                title={t('app.dash.actions.rename')}
+                aria-label={t('app.dash.actions.renameNamed', { name: title })}
+                onClick={startRename}
+              >
+                <IconPencil />
+              </button>
+            </div>
+          )}
 
           {(project.style || total) && (
             <p className="fsd-card__meta">
@@ -934,12 +1123,85 @@ function ProjectCard({
             <span>
               {project.renderCount
                 ? t('app.dash.card.renders', { count: project.renderCount })
-                : t('app.dash.card.noRenders')}
+                : project.hasScene
+                  ? t('app.dash.card.planOnly')
+                  : t('app.dash.card.noRenders')}
             </span>
           </div>
         </div>
       </Bezel>
     </article>
+  )
+}
+
+/* ------------------------------------------------------- /app chrome */
+
+/**
+ * Where the projects are kept, said in one line: in the account (and whether
+ * the last change has reached it), or only in this browser for a guest.
+ */
+export function SyncNote() {
+  const { t } = useTranslation()
+  const user = useSession((s) => s.user)
+  const status = useSync((s) => s.status)
+  const reason = useSync((s) => s.reason)
+
+  if (!user) {
+    return (
+      <span className="fsd-sync" data-state="local">
+        <span className="fsd-sync__dot" aria-hidden="true" />
+        <span>{t('app.sync.local')}</span>
+        <Link to="/signup">{t('nav.signup')}</Link>
+      </span>
+    )
+  }
+  const state = status === 'error' ? 'error' : status === 'synced' ? 'synced' : 'syncing'
+  return (
+    <span className="fsd-sync" data-state={state} role="status">
+      <span className="fsd-sync__dot" aria-hidden="true" />
+      <span>
+        {state === 'synced'
+          ? t('app.sync.synced')
+          : state === 'syncing'
+            ? t('app.sync.syncing')
+            : reason === 'project_limit'
+              ? t('app.sync.limit')
+              : reason === 'payload_too_large'
+                ? t('app.sync.tooLarge')
+                : t('app.sync.error')}
+      </span>
+      {state === 'error' && (
+        <button type="button" onClick={() => void retrySync()}>
+          {t('common.retry')}
+        </button>
+      )}
+    </span>
+  )
+}
+
+/**
+ * Projects · Saved · Settings. The three /app screens had no way to reach one
+ * another — Settings (and with it "Log out") could only be opened by typing
+ * its address. This row sits at the top of each of them.
+ */
+export function AppNav() {
+  const { t } = useTranslation()
+  const tab = ({ isActive }: { isActive: boolean }) => cn('fsd-appnav__tab', isActive && 'active')
+  return (
+    <div className="fsd-appnav">
+      <nav className="fsd-appnav__tabs" aria-label={t('app.nav.label')}>
+        <NavLink to="/app" end className={tab}>
+          {t('app.nav.projects')}
+        </NavLink>
+        <NavLink to="/app/saved" className={tab}>
+          {t('app.nav.saved')}
+        </NavLink>
+        <NavLink to="/app/settings" className={tab}>
+          {t('app.nav.settings')}
+        </NavLink>
+      </nav>
+      <SyncNote />
+    </div>
   )
 }
 
@@ -1018,8 +1280,6 @@ export function Dashboard() {
   const ready = useProjects((s) => s.ready)
   const error = useProjects((s) => s.error)
   const hydrate = useProjects((s) => s.hydrate)
-  const create = useProjects((s) => s.create)
-  const duplicate = useProjects((s) => s.duplicate)
   const remove = useProjects((s) => s.remove)
   const clearError = useProjects((s) => s.clearError)
 
@@ -1037,14 +1297,6 @@ export function Dashboard() {
     const slot = hour < 12 ? 'morning' : hour < 18 ? 'day' : 'evening'
     return t(`app.dash.greeting.${slot}`, { name: user.name.split(' ')[0] })
   }, [user, t])
-
-  // Which projects came out of capture, read once per project list rather
-  // than per card render (each lookup parses the whole capture store).
-  const recordIds = useMemo(
-    () => new Set(listRecords().map((r) => r.id)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [projects]
-  )
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -1067,15 +1319,11 @@ export function Dashboard() {
   )
 
   function openSample() {
-    // The empty state's sample is a real project, created on the spot, so
-    // "open it" means the same thing it will mean for every other card.
-    const made = create({
-      title: t('app.dash.empty.sampleTitle'),
-      roomType: 'living',
-      style: t('app.dash.empty.sampleStyle'),
-      status: 'ready',
-      notes: t('app.dash.empty.sampleMeta'),
-    })
+    // The empty state's sample is a real project, created on the spot: a
+    // furnished room in the 3D builder (it used to be an empty room marked
+    // "ready"), so "open it" means the same thing it will mean for every
+    // other card — and "Generate design" is one tap away.
+    const made = createSampleProject()
     if (made) navigate(`/app/room/${made.id}`)
   }
 
@@ -1096,6 +1344,7 @@ export function Dashboard() {
 
       <section className="fsd-page">
         <div className="fs-container">
+          <AppNav />
           {/* ---- greeting + meter ---------------------------------- */}
           <div className="fs-grid fsd-head">
             <RevealBlur className="fsd-head__text">
@@ -1381,9 +1630,10 @@ export function Dashboard() {
                       <ProjectCard
                         project={project}
                         cell={CELLS[i % CELLS.length]}
-                        hasRecord={recordIds.has(project.id)}
-                        onDuplicate={() => duplicate(project.id)}
+                        signedIn={Boolean(user)}
+                        onDuplicate={() => void duplicateProject(project.id)}
                         onDelete={() => remove(project.id)}
+                        onRename={(title) => void renameProject(project.id, title)}
                       />
                     </RevealBlur>
                   ))}

@@ -12,9 +12,13 @@ import './design/luxury.css'
 import './i18n/config'
 import { initPrefs } from './store/prefs'
 import { initSession } from './store/session'
+import { initSync } from './store/sync'
 import { Router } from './router'
 
 initPrefs()
+// Before the session answers: the engine must hear the very first "who is
+// signed in" to line this device's projects up with that account.
+initSync()
 initSession()
 
 createRoot(document.getElementById('root')!).render(

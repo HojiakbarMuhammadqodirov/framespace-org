@@ -14,6 +14,8 @@ async function post(url, body, signal) {
         (res.status === 413 ? 'Photos are too large to send (413).' : `Request failed (${res.status})`)
     )
     err.status = res.status
+    // The server's machine-readable reason (`quota_exceeded`, `rate_limited`, …).
+    err.code = payload.code
     throw err
   }
   return payload
@@ -36,8 +38,11 @@ export async function getHealth() {
   }
 }
 
-/** The render normally answers in ~30 s. Past this the request is abandoned. */
-export const RENDER_TIMEOUT_MS = 120_000
+/**
+ * The render normally answers in ~30 s, but a retried provider call can take
+ * minutes and the server allows itself six. Past this the request is abandoned.
+ */
+export const RENDER_TIMEOUT_MS = 240_000
 
 /**
  * @param {object} project

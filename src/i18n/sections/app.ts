@@ -108,6 +108,7 @@ const bundle: Bundle = {
           builderCta: '3D quruvchida yigʻish',
           builderHint: 'Surat shart emas — devorlar va mebelni oʻzingiz joylaysiz.',
         },
+        draftTitle: 'Nomsiz xona',
         stats: { projects: 'Loyihalar', renders: 'Renderlar', ready: 'Tayyor' },
         credits: {
           eyebrow: 'Hisob',
@@ -133,6 +134,7 @@ const bundle: Bundle = {
         card: {
           renders: '{{count}} ta render',
           noRenders: 'Render yo’q',
+          planOnly: "3D reja — render hali yo'q",
           updated: 'Yangilandi',
         },
         actions: {
@@ -143,11 +145,19 @@ const bundle: Bundle = {
           duplicate: 'Nusxa olish',
           delete: "O'chirish",
           confirmDelete: 'Bu loyiha o’chirilsinmi? Qaytarib bo’lmaydi.',
+          edit3d: '3D quruvchida tahrirlash',
+          rename: "Nomini o'zgartirish",
+          renameLabel: 'Loyiha nomi',
+          renameNamed: "“{{name}}” nomini o'zgartirish",
+        },
+        share: {
+          account: "Havola nusxalandi. U faqat hisobingizga kirgan qurilmada ochiladi — boshqalarga rasmlarni yuboring.",
+          device: "Havola nusxalandi. U faqat shu brauzerda ochiladi — boshqalarga rasmlarni yuboring.",
         },
         empty: {
           eyebrow: 'Bo’sh',
           title: 'Birinchi xona hali chizilmagan.',
-          body: "Quyida — namuna loyiha. Ochib ko'ring, FrameSpace nimani qaytarishini shunda tushunasiz.",
+          body: "Quyida — namuna xona. Uni 3D quruvchida oching, jihozlarni suring va “Dizayn yaratish”ni bosing — FrameSpace nimani qaytarishini shunda ko'rasiz.",
           cta: 'Xonani suratga olish',
           sampleTitle: 'Namuna: yorug’ mehmonxona',
           sampleStyle: 'Japandi',
@@ -232,7 +242,47 @@ const bundle: Bundle = {
           saved: '{{count}} ta saqlangan buyum',
           forget: 'Barcha ma’lumotni o’chirish',
           forgetHint: "Loyihalar, saqlanganlar va hisob — hammasi shu brauzerdan o'chadi.",
+          projectsAccount: 'Hisobingizdagi loyihalar: {{count}} ta',
+          forgetHintAccount: "Hisobdan chiqasiz, loyihalar va saqlanganlar shu brauzerdan o'chadi. Hisobingizdagi nusxa joyida qoladi.",
           confirm: "Hamma ma'lumot o'chirilsinmi? Qaytarib bo'lmaydi.",
+        },
+      },
+
+      // Where projects are kept: the line under the /app tabs (SyncNote).
+      sync: {
+        local: 'Faqat shu brauzerda saqlanadi',
+        synced: 'Hisobingizga saqlandi',
+        syncing: 'Hisobga saqlanmoqda…',
+        error: "Hisobga saqlab bo'lmadi",
+        limit: "Hisobdagi loyihalar soni chegaraga yetdi — birortasini o'chiring",
+        tooLarge: "Bitta loyiha juda katta — hisobga sig'madi",
+      },
+
+      // Projects · Saved · Settings (AppNav).
+      nav: {
+        label: "Ish maydoni bo'limlari",
+        projects: 'Loyihalar',
+        saved: 'Saqlanganlar',
+        settings: 'Sozlamalar',
+      },
+
+      // The builder's "Generate design" sheet: what this file's owner adds on
+      // top of builder.generate.* (account-aware notes, every server error kind).
+      gen: {
+        savedAccount: 'Reja hisobingizga avtomatik saqlanadi — istalgan qurilmadan ochasiz.',
+        savedDevice: 'Reja shu brauzerda avtomatik saqlanadi. Hisob ochsangiz, u hisobingizda turadi.',
+        wait: "Odatda 30–90 soniya, ba'zan bir necha daqiqa ketadi. Bu oynani yopmang.",
+        errors: {
+          offline: "Internet yo'q. Aloqani tekshirib, qayta urinib ko'ring.",
+          timeout: "Server juda uzoq javob bermadi. Birozdan so'ng qayta urinib ko'ring.",
+          server: "Serverda xatolik yuz berdi. Qayta urinib ko'ring.",
+          quota: 'Bu oy uchun bepul generatsiyalar tugadi. Ular keyingi oyning 1-kunida yangilanadi.',
+          quotaGuest: 'Bepul generatsiyangiz ishlatildi. Hisob oching — har oy uchta bepul generatsiya beriladi.',
+          'rate-limited': "Qisqa vaqtda juda ko'p so'rov yuborildi. Bir necha daqiqa kutib, qayta urinib ko'ring.",
+          busy: "Sun'iy intellekt xizmati hozir band. Bir daqiqadan so'ng qayta urinib ko'ring.",
+          invalid: "Server bu xona rejasini qabul qilmadi. Xonani o'zgartirib, qayta urinib ko'ring.",
+          'bad-response': "Server kutilmagan javob qaytardi. Qayta urinib ko'ring.",
+          aborted: 'Bekor qilindi.',
         },
       },
 
@@ -355,6 +405,7 @@ const bundle: Bundle = {
           builderCta: 'Собрать в 3D-конструкторе',
           builderHint: 'Без фото — стены и мебель расставляете сами.',
         },
+        draftTitle: 'Комната без названия',
         stats: { projects: 'Проекты', renders: 'Рендеры', ready: 'Готово' },
         credits: {
           eyebrow: 'Счёт',
@@ -380,6 +431,7 @@ const bundle: Bundle = {
         card: {
           renders: 'Рендеров: {{count}}',
           noRenders: 'Без рендеров',
+          planOnly: '3D-план, рендеров пока нет',
           updated: 'Обновлён',
         },
         actions: {
@@ -390,11 +442,19 @@ const bundle: Bundle = {
           duplicate: 'Дублировать',
           delete: 'Удалить',
           confirmDelete: 'Удалить этот проект? Отменить не получится.',
+          edit3d: 'Редактировать в 3D-конструкторе',
+          rename: 'Переименовать',
+          renameLabel: 'Название проекта',
+          renameNamed: 'Переименовать «{{name}}»',
+        },
+        share: {
+          account: 'Ссылка скопирована. Она откроется только у вас, после входа в аккаунт, — другим отправьте изображения.',
+          device: 'Ссылка скопирована. Она откроется только в этом браузере — другим отправьте изображения.',
         },
         empty: {
           eyebrow: 'Пусто',
           title: 'Первая комната ещё не нарисована.',
-          body: 'Ниже — пример проекта. Откройте его, и станет понятно, что именно возвращает FrameSpace.',
+          body: 'Ниже — пример комнаты. Откройте её в 3D-конструкторе, подвигайте мебель и нажмите «Создать дизайн» — так вы увидите, что возвращает FrameSpace.',
           cta: 'Снять комнату',
           sampleTitle: 'Пример: светлая гостиная',
           sampleStyle: 'Japandi',
@@ -474,7 +534,43 @@ const bundle: Bundle = {
           saved: 'Сохранённых предметов: {{count}}',
           forget: 'Удалить все данные',
           forgetHint: 'Проекты, сохранённое и аккаунт — всё исчезнет из этого браузера.',
+          projectsAccount: 'Проектов в аккаунте: {{count}}',
+          forgetHintAccount: 'Вы выйдете из аккаунта, а проекты и сохранённое исчезнут из этого браузера. Копия в аккаунте останется.',
           confirm: 'Удалить все данные? Отменить не получится.',
+        },
+      },
+
+      sync: {
+        local: 'Хранится только в этом браузере',
+        synced: 'Сохранено в аккаунте',
+        syncing: 'Сохраняем в аккаунт…',
+        error: 'Не удалось сохранить в аккаунт',
+        limit: 'В аккаунте максимум проектов — удалите один',
+        tooLarge: 'Один проект слишком большой и не поместился в аккаунт',
+      },
+
+      nav: {
+        label: 'Разделы рабочего пространства',
+        projects: 'Проекты',
+        saved: 'Сохранённое',
+        settings: 'Настройки',
+      },
+
+      gen: {
+        savedAccount: 'План автоматически сохраняется в вашем аккаунте — откроется на любом устройстве.',
+        savedDevice: 'План автоматически сохраняется в этом браузере. С аккаунтом он будет храниться в нём.',
+        wait: 'Обычно это занимает 30–90 секунд, иногда несколько минут. Не закрывайте это окно.',
+        errors: {
+          offline: 'Нет соединения. Проверьте интернет и попробуйте ещё раз.',
+          timeout: 'Сервер слишком долго не отвечал. Попробуйте чуть позже.',
+          server: 'На сервере что-то пошло не так. Попробуйте ещё раз.',
+          quota: 'Бесплатные генерации на этот месяц закончились. Они обновятся 1-го числа.',
+          quotaGuest: 'Бесплатная генерация использована. Создайте аккаунт — в нём три бесплатные генерации в месяц.',
+          'rate-limited': 'Слишком много запросов за короткое время. Подождите несколько минут и попробуйте снова.',
+          busy: 'Сервис ИИ сейчас перегружен. Попробуйте через минуту.',
+          invalid: 'Сервер не принял план этой комнаты. Измените комнату и попробуйте ещё раз.',
+          'bad-response': 'Сервер прислал неожиданный ответ. Попробуйте ещё раз.',
+          aborted: 'Отменено.',
         },
       },
 
@@ -597,6 +693,7 @@ const bundle: Bundle = {
           builderCta: 'Build it in 3D',
           builderHint: 'No photos needed — place the walls and furniture yourself.',
         },
+        draftTitle: 'Untitled room',
         stats: { projects: 'Projects', renders: 'Renders', ready: 'Ready' },
         credits: {
           eyebrow: 'Account',
@@ -618,10 +715,13 @@ const bundle: Bundle = {
           status: 'Status',
           room: 'Room',
           results: '{{count}} projects',
+          results_one: '{{count}} project',
         },
         card: {
           renders: '{{count}} renders',
+          renders_one: '{{count}} render',
           noRenders: 'No renders yet',
+          planOnly: '3D plan — no renders yet',
           updated: 'Updated',
         },
         actions: {
@@ -632,11 +732,19 @@ const bundle: Bundle = {
           duplicate: 'Duplicate',
           delete: 'Delete',
           confirmDelete: 'Delete this project? It cannot be undone.',
+          edit3d: 'Edit in the 3D builder',
+          rename: 'Rename',
+          renameLabel: 'Project name',
+          renameNamed: 'Rename “{{name}}”',
+        },
+        share: {
+          account: 'Link copied. It opens only for you, signed in to this account — send the images to others.',
+          device: 'Link copied. It opens in this browser only — send the images to others.',
         },
         empty: {
           eyebrow: 'Empty',
           title: 'The first room has not been drawn yet.',
-          body: 'Below is a sample project. Open it and you will see exactly what FrameSpace hands back.',
+          body: 'Below is a sample room. Open it in the 3D builder, move things around and press “Generate design” — that is exactly what FrameSpace hands back.',
           cta: 'Photograph a room',
           sampleTitle: 'Sample: a bright living room',
           sampleStyle: 'Japandi',
@@ -716,7 +824,43 @@ const bundle: Bundle = {
           saved: '{{count}} saved pieces',
           forget: 'Erase everything',
           forgetHint: 'Projects, saved pieces and the account all leave this browser.',
+          projectsAccount: 'Projects in your account: {{count}}',
+          forgetHintAccount: 'You are signed out, and projects and saved pieces leave this browser. The copy in your account stays.',
           confirm: 'Erase all data? It cannot be undone.',
+        },
+      },
+
+      sync: {
+        local: 'Kept in this browser only',
+        synced: 'Saved to your account',
+        syncing: 'Saving to your account…',
+        error: 'Could not save to your account',
+        limit: 'Your account is at its project limit — delete one',
+        tooLarge: 'One project is too large to keep in the account',
+      },
+
+      nav: {
+        label: 'Workspace sections',
+        projects: 'Projects',
+        saved: 'Saved',
+        settings: 'Settings',
+      },
+
+      gen: {
+        savedAccount: 'Your plan is saved to your account automatically — open it from any device.',
+        savedDevice: 'Your plan is saved in this browser automatically. With an account it is kept there instead.',
+        wait: 'This usually takes 30–90 seconds, occasionally a few minutes. Keep this window open.',
+        errors: {
+          offline: 'You are offline. Check the connection and try again.',
+          timeout: 'The server took too long to answer. Try again in a moment.',
+          server: 'Something went wrong on the server. Please try again.',
+          quota: 'This month’s free generations are used up. They reset on the 1st.',
+          quotaGuest: 'Your free generation is used. Create an account — it comes with three a month.',
+          'rate-limited': 'Too many requests in a short time. Wait a few minutes and try again.',
+          busy: 'The AI service is busy right now. Try again in a minute.',
+          invalid: 'The server did not accept this room plan. Change the room and try again.',
+          'bad-response': 'The server sent an unexpected answer. Please try again.',
+          aborted: 'Cancelled.',
         },
       },
 

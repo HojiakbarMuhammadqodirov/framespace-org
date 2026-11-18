@@ -133,6 +133,7 @@ const T = {
       timeout: 'Sunʼiy intellekt xizmati juda uzoq javob berdi. Qayta urinib koʻring.',
       failed: 'Sunʼiy intellekt xizmati dizayn tayyorlay olmadi. Qayta urinib koʻring.',
       noImages: 'Dizayn tayyor, lekin rasmlar kelmadi. Qayta urinib koʻring.',
+      quota: 'Bu oy uchun bepul generatsiyalar tugadi. Ular keyingi oyning 1-kunida yangilanadi.',
     },
   },
   ru: {
@@ -182,6 +183,7 @@ const T = {
       timeout: 'Сервис ИИ слишком долго отвечал. Попробуйте ещё раз.',
       failed: 'Сервису ИИ не удалось подготовить дизайн. Попробуйте ещё раз.',
       noImages: 'Дизайн готов, но изображения не пришли. Попробуйте ещё раз.',
+      quota: 'Бесплатные генерации на этот месяц закончились. Они обновятся 1-го числа.',
     },
   },
   en: {
@@ -231,6 +233,7 @@ const T = {
       timeout: 'The AI service took too long to answer. Try again.',
       failed: 'The AI service failed to produce a design. Try again.',
       noImages: 'The design was written but no images came back.',
+      quota: 'This month\'s free generations are used up. They reset on the 1st.',
     },
   },
 }
